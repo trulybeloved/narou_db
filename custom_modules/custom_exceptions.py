@@ -1,0 +1,2 @@
+class WebPageLoadError(Exception):
+    pass
