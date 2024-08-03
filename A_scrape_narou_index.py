@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 
-from custom_modules.webscraper import async_playwright_webscrape
 from custom_modules.utilities import Git
 from custom_modules.webscraper import ScrapeInstruction, async_scrape_url_list
 

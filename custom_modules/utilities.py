@@ -2,6 +2,8 @@ from datetime import datetime, timezone, timedelta
 import time
 import git
 import backoff
+import re
+import os
 
 def convert_to_unix_timestamp(timestamp_str: str, offset_hours: float) -> int:
     # Define the format of the input timestamp
@@ -29,6 +31,39 @@ def get_current_unix_timestamp(mode: int = 1) -> int:
     if mode == 1:
         current_time = datetime.fromtimestamp(timestamp=time.time())
     return int(current_time.timestamp())
+
+def to_filename_friendly(string):
+    """
+    Convert any string into a filename friendly format.
+    """
+    # Replace invalid characters with underscores
+    filename_friendly = re.sub(r'[^\w\-_. ]', '_', string)
+    # Remove leading and trailing spaces
+    filename_friendly = filename_friendly.strip()
+    # Replace multiple spaces with a single space
+    filename_friendly = re.sub(r'\s+', ' ', filename_friendly)
+    # Replace spaces with underscores
+    filename_friendly = filename_friendly.replace(' ', '_')
+    return filename_friendly
+
+def list_files(folder_path):
+    """
+    Returns a list of paths of all files in a folder and its subfolders.
+
+    Args:
+    folder_path (str): The path to the folder.
+
+    Returns:
+    list: A list of paths of all files.
+    """
+    file_paths = []
+    for root, dirs, files in os.walk(folder_path):
+        for file in files:
+            file_paths.append(os.path.join(root, file))
+
+    return file_paths
+
+
 
 class Git:
 

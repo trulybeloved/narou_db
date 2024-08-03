@@ -1,4 +1,6 @@
-from requester import post_to_narou_db_api
+import os
+
+from custom_modules.requester import post_to_index_on_d1_db_api
 import json
 
 from custom_modules.narou_parser import parse_narou_index_html, parse_narou_chapter_html
@@ -57,15 +59,14 @@ async def main():
         if index_page['scrape_results']['.index_box']:
             parse_results = parse_narou_index_html(index_page['scrape_results']['.index_box'])
             for parse_result in parse_results:
-                parse_result['scrape_timestamp'] = scrape_timestamp
+                parse_result['scraped_timestamp'] = scrape_timestamp
                 complete_index_parse_results.append(parse_result)
 
-    cf_worker_url = 'http://127.0.0.1:8787/update/index'
+    cf_worker_url = os.getenv('')
+    chapter_links = [parse_result['narou_link'] for parse_result in complete_index_parse_results]
+    # print(chapter_links)
 
-    chapter_links = [parse_result['chapter_url'] for parse_result in complete_index_parse_results]
-    print(chapter_links)
-
-    tasks = [post_to_narou_db_api(cf_worker_url, index_entry) for index_entry in complete_index_parse_results]
+    tasks = [post_to_index_on_d1_db_api(index_entry) for index_entry in complete_index_parse_results]
 
     await asyncio.gather(*tasks)
 

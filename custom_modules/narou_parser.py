@@ -114,23 +114,23 @@ def parse_chapter_body(chapter_html: str) -> str:
     return chapter_text
 
 
-def parse_narou_chapter_html(scraper_results: dict) -> dict:
-    parse_results = {}
-    parse_results['narou_link'] = scraper_results['scraped_url']
-    parse_results['chapter_uid'] = str(scraper_results['scraped_url']).replace(
+def parse_narou_chapter_html(scraper_result: dict) -> dict:
+    parse_result = {}
+    parse_result['narou_link'] = scraper_result['scraped_url']
+    parse_result['chapter_uid'] = str(scraper_result['scraped_url']).replace(
         'https://ncode.syosetu.com/n2267be/', '').replace('/', '')
-    chapter_title = BeautifulSoup(scraper_results['scrape_results']['.novel_subtitle'], 'html.parser').text
-    parse_results['chapter_title'] = chapter_title
+    chapter_title = BeautifulSoup(scraper_result['scrape_results']['.novel_subtitle'], 'html.parser').text
+    parse_result['chapter_title'] = chapter_title
     chapter_title_parse_results = parse_chapter_title(chapter_title)
-    parse_results['chapter_id'] = generate_chapter_id(chapter_title_parse_results)
-    parse_results.update(chapter_title_parse_results)
+    parse_result['chapter_id'] = generate_chapter_id(chapter_title_parse_results)
+    parse_result.update(chapter_title_parse_results)
 
     chapter_text = str()
     # chapter_text += f'{chapter_title}\n\n'
-    chapter_text += parse_chapter_body(scraper_results['scrape_results']['#novel_honbun'])
-    parse_results['chapter_text'] = chapter_text
+    chapter_text += parse_chapter_body(scraper_result['scrape_results']['#novel_honbun'])
+    parse_result['chapter_body'] = chapter_text
 
-    return parse_results
+    return parse_result
 
 
 def parse_narou_index_html(index_html) -> list:
@@ -163,9 +163,9 @@ def parse_narou_index_html(index_html) -> list:
             chapter_edited = False
             chapter_edited_unix_timestamp = None
 
-        chapter_entry['uid'] = chapter_uid
-        chapter_entry['title'] = chapter_title
-        chapter_entry['chapter_url'] = chapter_url
+        chapter_entry['chapter_uid'] = chapter_uid
+        chapter_entry['chapter_title'] = chapter_title
+        chapter_entry['narou_link'] = chapter_url
         chapter_entry['publication_timestamp'] = chapter_published_unix_timestamp
         chapter_entry['chapter_edited'] = 1 if chapter_edited else 0
         chapter_entry['edit_timestamp'] = chapter_edited_unix_timestamp if chapter_edited_unix_timestamp else 0

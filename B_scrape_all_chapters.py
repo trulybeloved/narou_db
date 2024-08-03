@@ -17,10 +17,10 @@ async def scrape_all_chapters():
         if index_page['scrape_results']['.index_box']:
             parse_results = parse_narou_index_html(index_page['scrape_results']['.index_box'])
             for parse_result in parse_results:
-                parse_result['scrape_timestamp'] = scrape_timestamp
+                parse_result['scraped_timestamp'] = scrape_timestamp
                 complete_index_parse_results.append(parse_result)
 
-    chapter_links = [parse_result['chapter_url'] for parse_result in complete_index_parse_results]
+    chapter_links = [parse_result['narou_link'] for parse_result in complete_index_parse_results]
 
     query_selectors = ['.novel_subtitle', '#novel_honbun']
 
