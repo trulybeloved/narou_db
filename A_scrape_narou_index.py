@@ -1,24 +1,10 @@
 import asyncio
 import json
-from loguru import logger
 import os
 
 from custom_modules.webscraper import async_playwright_webscrape
 from custom_modules.utilities import Git
-
-class ScrapeInstruction:
-
-    def __init__(self, scrape_url: str, query_selectors: list):
-        self.url = scrape_url
-        self.query_selectors = query_selectors
-
-async def async_scrape_url_list(scrape_instructions_list: list[ScrapeInstruction]):
-
-
-    tasks = [async_playwright_webscrape(instruction.url, instruction.query_selectors) for instruction in scrape_instructions_list]
-    resutls = await asyncio.gather(*tasks)
-
-    return resutls
+from custom_modules.webscraper import ScrapeInstruction, async_scrape_url_list
 
 async def scrape_narou_index():
     url_list = [
@@ -45,6 +31,7 @@ async def scrape_narou_index():
     Git.git_commit_all(os.getcwd(), 'automated commit')
     Git.git_push(os.getcwd(), 'master')
 
+    return scrape_results
 
 
 # async def main():

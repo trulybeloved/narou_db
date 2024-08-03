@@ -1,19 +1,21 @@
 import typing
 import asyncio
 import sys
-
 import requests
 from playwright.sync_api import sync_playwright
 from playwright.async_api import async_playwright, Browser
 from loguru import logger
 import aiohttp
 import backoff
-
 from custom_modules.custom_exceptions import WebPageLoadError
 
 
-# if sys.platform == "win32":
-#     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+class ScrapeInstruction:
+
+    def __init__(self, scrape_url: str, query_selectors: list):
+        self.url = scrape_url
+        self.query_selectors = query_selectors
+
 
 def get_http_response_status(url: str) -> int:
     try:
@@ -56,7 +58,7 @@ async def async_playwright_webscrape(
 
     results = {'scraped_url': url}
     scrape_results = {}
-
+    print(f'Scraping {url}')
     async with semaphore:
         async with async_playwright() as playwright:
             if not browser:
@@ -130,6 +132,14 @@ def sync_playwright_webscrape(
         browser.close()
 
     results['scrape_results'] = scrape_results
+    return results
+
+
+async def async_scrape_url_list(scrape_instructions_list: list[ScrapeInstruction]):
+    tasks = [async_playwright_webscrape(instruction.url, instruction.query_selectors) for instruction in
+             scrape_instructions_list]
+    results = await asyncio.gather(*tasks)
+
     return results
 
 

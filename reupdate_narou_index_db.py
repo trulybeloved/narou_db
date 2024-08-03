@@ -45,10 +45,10 @@ async def main():
     scrape_timestamp = get_current_unix_timestamp()
     scrape_results = await async_scrape_url_list(instructions_list)
 
-    with open('datastores/index_scrape_resuslts.json', 'w', encoding='utf-8') as json_file:
+    with open('datastores/index_scrape_results.json', 'w', encoding='utf-8') as json_file:
         json_file.write(json.dumps(scrape_results, ensure_ascii=False, indent=4))
 
-    with open('datastores/index_scrape_resuslts.json', 'r', encoding='utf-8') as index_scrape_file:
+    with open('datastores/index_scrape_results.json', 'r', encoding='utf-8') as index_scrape_file:
         index_scrape_results = json.loads(index_scrape_file.read())
 
     complete_index_parse_results = []
