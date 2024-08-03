@@ -33,19 +33,5 @@ async def scrape_narou_index():
 
     return scrape_results
 
-
-# async def main():
-#     url_list = [
-#         'https://ncode.syosetu.com/n2267be/1/',
-#     ]
-#     query_selectors = ['.novel_subtitle', '#novel_honbun']
-#
-#     instructions_list = [ScrapeInstruction(url, query_selectors) for url in url_list]
-#
-#     scrape_results = await async_scrape_url_list(instructions_list)
-#
-#     with open('datastores/chapter_scrape_resuslt.json', 'w', encoding='utf-8') as json_file:
-#         json_file.write(json.dumps(scrape_results, ensure_ascii=False, indent=4))
-#
 if __name__ == "__main__":
     asyncio.run(scrape_narou_index())

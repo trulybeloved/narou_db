@@ -1,8 +1,9 @@
 import asyncio
 import json
+import os
 from A_scrape_narou_index import scrape_narou_index
 from custom_modules.narou_parser import parse_narou_index_html
-from custom_modules.utilities import get_current_unix_timestamp
+from custom_modules.utilities import get_current_unix_timestamp, Git
 from custom_modules.webscraper import ScrapeInstruction, async_scrape_url_list
 
 
@@ -30,6 +31,10 @@ async def scrape_all_chapters():
     with open('datastores/chapter_scrape_resuslt.json', 'w', encoding='utf-8') as json_file:
         json_file.write(json.dumps(scrape_results, ensure_ascii=False, indent=4))
 
+    Git.git_commit_all(os.getcwd(), 'automated commit')
+    Git.git_push(os.getcwd(), 'master')
+
+    return scrape_results
 
 if __name__ == "__main__":
     asyncio.run(scrape_all_chapters())
