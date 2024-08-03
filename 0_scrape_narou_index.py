@@ -43,7 +43,7 @@ async def scrape_narou_index():
     print('COMPLETED NAROU INDEX SCRAPE. JSON file saved to datastores/index_scrape_results.json')
 
     Git.git_commit_all(os.getcwd(), 'automated commit')
-    Git.git_push(os.getcwd())
+    Git.git_push(os.getcwd(), 'master')
 
 
 
