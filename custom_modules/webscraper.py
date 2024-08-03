@@ -58,7 +58,6 @@ async def async_playwright_webscrape(
 
     results = {'scraped_url': url}
     scrape_results = {}
-    print(f'Scraping {url}')
     async with semaphore:
         async with async_playwright() as playwright:
             if not browser:
@@ -70,6 +69,7 @@ async def async_playwright_webscrape(
             page = await browser.new_page()
 
             try:
+                print(f'Scraping {url}')
                 await page.goto(url=url, timeout=0, wait_until='domcontentloaded')
 
             except Exception as e:
