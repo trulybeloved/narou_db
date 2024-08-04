@@ -136,7 +136,7 @@ async def main():
             tasks = [post_to_index_on_d1_db_api(index_entry) for index_entry in mismatched_entries]
             await asyncio.gather(*tasks)
 
-        sleep_with_progress(600)
+        sleep_with_progress(900)
 
 
 if __name__ == "__main__":

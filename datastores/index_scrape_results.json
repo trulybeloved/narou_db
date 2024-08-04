@@ -46,5 +46,11 @@
         "scrape_results": {
             ".index_box": null
         }
+    },
+    {
+        "scraped_url": "https://ncode.syosetu.com/n2267be/?p=9",
+        "scrape_results": {
+            ".index_box": null
+        }
     }
 ]
