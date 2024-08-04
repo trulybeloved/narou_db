@@ -2,6 +2,8 @@ import asyncio
 import json
 import os
 
+from loguru import logger
+
 from custom_modules.utilities import get_current_unix_timestamp, to_filename_friendly, list_files, sleep_with_progress
 from custom_modules.narou_parser import parse_narou_index_html, parse_narou_chapter_html
 from custom_modules.requester import get_index_from_d1_db_api, post_to_index_on_d1_db_api, post_chapter_to_d1_db_api
@@ -12,9 +14,7 @@ async def main():
 
     load_dotenv()
 
-    TERMINATE = False
-
-    while not TERMINATE:
+    while True:
 
         url_list = [
             'https://ncode.syosetu.com/n2267be/?p=1',
@@ -27,6 +27,7 @@ async def main():
             'https://ncode.syosetu.com/n2267be/?p=8',
             'https://ncode.syosetu.com/n2267be/?p=9',
         ]
+
         query_selectors = ['.index_box']
 
         instructions_list = [ScrapeInstruction(url, query_selectors) for url in url_list]
@@ -48,16 +49,16 @@ async def main():
                 for parse_result in parse_results:
                     parse_result['scraped_timestamp'] = scrape_timestamp
                     local_index.append(parse_result)
-        print('Local Index compiled')
+        print('\nLocal Index compiled\n')
 
         try:
             remote_index = await get_index_from_d1_db_api()
-            print('Remote Index obtained')
+            print('\nRemote Index obtained\n')
         except Exception as e:
-            raise e
+            logger.error('COULD NOT OBTAIN REMOTE INDEX FROM API. Exiting to next iteration')
+            continue
 
-        print(local_index[0])
-        # print(remote_index[0])
+        print(local_index[-1])
 
         local_index = sorted(local_index, key=lambda x: x['chapter_uid'])
         remote_index = sorted(remote_index, key=lambda x: x['chapter_uid'])
@@ -68,8 +69,9 @@ async def main():
             del entry['upload_timestamp']
             processed_remote_index.append(entry)
 
-        print(processed_remote_index[0])
+        print(processed_remote_index[-1])
 
+        # CHECK FOR DIFFERENCES
         mismatched_entries = []
 
         # Determine the length to iterate through
@@ -95,9 +97,9 @@ async def main():
         elif len(remote_index) > len(local_index):
             mismatched_entries.extend(remote_index[min_length:])
 
-        print(mismatched_entries)
+        print(f'\nMismatched Entries: {mismatched_entries}\n')
 
-        print(f'Mismatched Entry Count = {len(mismatched_entries)}')
+        print(f'\nMismatched Entry Count = {len(mismatched_entries)}\n')
 
         if mismatched_entries:
 
@@ -108,7 +110,12 @@ async def main():
             instructions_list = [ScrapeInstruction(url, query_selectors) for url in urls_to_scrape]
 
             chapter_scrape_timestamp = get_current_unix_timestamp()
-            scrape_results = await async_scrape_url_list(instructions_list)
+
+            try:
+                scrape_results = await async_scrape_url_list(instructions_list)
+            except:
+                logger.error('CHAPTER SCRAPE FAILED. Exiting to next iteration.')
+                continue
 
             for scrape_result in scrape_results:
                 with open(f'datastores/chapters/{to_filename_friendly(scrape_result["scraped_url"])}.json', 'w', encoding='utf-8') as chapter_scrape_savefile:
@@ -126,15 +133,26 @@ async def main():
             for chapter_parse_result in chapter_parse_results:
                 chapter_parse_result['scraped_timestamp'] = chapter_scrape_timestamp
 
-            print(chapter_parse_results[0])
+            print(f'CHAPTER PARSE RESULTS:\n{chapter_parse_results}\n')
 
             # Update Chapters
-            tasks = [post_chapter_to_d1_db_api(chapter_parse_result) for chapter_parse_result in chapter_parse_results]
-            await asyncio.gather(*tasks)
+            try:
+                tasks = [post_chapter_to_d1_db_api(chapter_parse_result) for chapter_parse_result in chapter_parse_results]
+                await asyncio.gather(*tasks)
+            except:
+                logger.error('CHAPTER PUT TO CF DB FAILED. Exiting to next iteration.')
+                continue
 
             # Update Index
-            tasks = [post_to_index_on_d1_db_api(index_entry) for index_entry in mismatched_entries]
-            await asyncio.gather(*tasks)
+            try:
+                tasks = [post_to_index_on_d1_db_api(index_entry) for index_entry in mismatched_entries]
+                await asyncio.gather(*tasks)
+            except:
+                logger.error('INDEX UPDATE ON CF DB FAILED. Exiting to next iteration.')
+                continue
+
+        else:
+            logger.info('No new/modified entries found')
 
         sleep_with_progress(900)
 

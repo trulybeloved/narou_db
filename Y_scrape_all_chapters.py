@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-from A_scrape_narou_index import scrape_narou_index
+from X_scrape_narou_index import scrape_narou_index
 from custom_modules.narou_parser import parse_narou_index_html
 from custom_modules.utilities import get_current_unix_timestamp, Git
 from custom_modules.webscraper import ScrapeInstruction, async_scrape_url_list
