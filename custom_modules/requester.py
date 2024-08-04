@@ -8,34 +8,6 @@ from dotenv import load_dotenv
 import os
 from loguru import logger
 
-# @backoff.on_exception(
-#     backoff.expo,
-#     exception=(ClientError),
-#     max_tries=3)
-# async def get_from_narou_db_api(url: str):
-#     # Get url and auth key
-#     auth_token = os.getenv('AUTH_TOKEN')
-#
-#     headers = {
-#         "Authorization": f"{auth_token}",
-#     }
-#
-#     async with aiohttp.ClientSession() as session:
-#         result = await session.get(url=url, headers=headers)
-#         if result.status != 200:
-#             logger.error(f'Request generated an abnormal response code: {result.status}')
-#             logger.error(f'{result.content}')
-#             raise ClientError
-#         text = await result.text()
-#         body = await result.json()
-#     # print(result)
-#     print(text)
-#     # print(body)
-#     logger.success(f'Function complete')
-#
-#     return body
-
-
 @backoff.on_exception(
     backoff.expo,
     exception=(ClientError),
@@ -58,6 +30,32 @@ async def get_index_from_d1_db_api():
         body = await result.json()
 
     return body
+
+@backoff.on_exception(
+    backoff.expo,
+    exception=(ClientError),
+    max_tries=3)
+async def get_chapter_from_d1_db_api(uid: int):
+    # Get url and auth key
+    auth_token = os.getenv('AUTH_TOKEN')
+    url = f'{os.getenv("D1_API_URL")}{os.getenv("D1_API_GET_CHAPTER_PATH")}/uid/{uid}'
+
+    headers = {
+        "Authorization": f"{auth_token}",
+    }
+
+    async with aiohttp.ClientSession() as session:
+        result = await session.get(url=url, headers=headers)
+        if result.status != 200:
+            logger.error(f'Request generated an abnormal response code: {result.status}')
+            logger.error(f'{result.content}')
+            raise ClientError
+        body = await result.json()
+
+    print(body)
+
+    return body
+
 
 @backoff.on_exception(
     backoff.expo,
@@ -115,5 +113,5 @@ async def post_chapter_to_d1_db_api(chapter_entry: dict):
 
 if __name__ == "__main__":
     load_dotenv()
-    asyncio.run(get_index_from_d1_db_api())
-
+    # asyncio.run(get_index_from_d1_db_api())
+    asyncio.run(get_chapter_from_d1_db_api(100))

@@ -5,6 +5,9 @@ import backoff
 import re
 import os
 
+from loguru import logger
+from tqdm import tqdm
+
 def convert_to_unix_timestamp(timestamp_str: str, offset_hours: float) -> int:
     # Define the format of the input timestamp
     date_format = "%Y/%m/%d %H:%M"
@@ -98,3 +101,10 @@ class Git:
             print("Pushed changes successfully.")
         except git.GitCommandError as e:
             print("Error:", e)
+
+
+def sleep_with_progress(sleep_interval):
+    logger.info(f'Sleeping for {sleep_interval} seconds...')
+    for i in tqdm(range(sleep_interval), desc="Sleeping", unit="sec"):
+        time.sleep(1)
+

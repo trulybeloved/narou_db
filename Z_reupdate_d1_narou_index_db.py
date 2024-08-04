@@ -11,22 +11,10 @@ import json
 import pprint
 
 from dotenv import load_dotenv
-from custom_modules.webscraper import async_playwright_webscrape
+from custom_modules.webscraper import async_playwright_webscrape, async_scrape_url_list, ScrapeInstruction
 
-class ScrapeInstruction:
 
-    def __init__(self, scrape_url: str, query_selectors: list):
-        self.url = scrape_url
-        self.query_selectors = query_selectors
-
-async def async_scrape_url_list(scrape_instructions_list: list[ScrapeInstruction]):
-
-    tasks = [async_playwright_webscrape(instruction.url, instruction.query_selectors) for instruction in scrape_instructions_list]
-    resutls = await asyncio.gather(*tasks)
-
-    return resutls
-
-async def main():
+async def scrape_narou_index():
 
     load_dotenv()
 
@@ -71,4 +59,4 @@ async def main():
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(scrape_narou_index())
