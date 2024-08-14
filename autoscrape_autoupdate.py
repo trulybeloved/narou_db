@@ -16,6 +16,8 @@ async def main():
 
     while True:
 
+        skip_loop_flag = False
+
         url_list = [
             'https://ncode.syosetu.com/n2267be/?p=1',
             'https://ncode.syosetu.com/n2267be/?p=2',
@@ -33,126 +35,132 @@ async def main():
         instructions_list = [ScrapeInstruction(url, query_selectors) for url in url_list]
 
         scrape_timestamp = get_current_unix_timestamp()
-        scrape_results = await async_scrape_url_list(instructions_list)
-
-        with open('datastores/index_scrape_results.json', 'w', encoding='utf-8') as json_file:
-            json_file.write(json.dumps(scrape_results, ensure_ascii=False, indent=4))
-
-        with open('datastores/index_scrape_results.json', 'r', encoding='utf-8') as index_scrape_file:
-            index_scrape_results = json.loads(index_scrape_file.read())
-
-        local_index = []
-
-        for index_page in index_scrape_results:
-            if index_page['scrape_results']['.index_box']:
-                parse_results = parse_narou_index_html(index_page['scrape_results']['.index_box'])
-                for parse_result in parse_results:
-                    parse_result['scraped_timestamp'] = scrape_timestamp
-                    local_index.append(parse_result)
-        print('\nLocal Index compiled\n')
-
         try:
-            remote_index = await get_index_from_d1_db_api()
-            print('\nRemote Index obtained\n')
+            scrape_results = await async_scrape_url_list(instructions_list)
         except Exception as e:
-            logger.error('COULD NOT OBTAIN REMOTE INDEX FROM API. Exiting to next iteration')
-            continue
+            logger.error("SCRAPE WAS UNSUCESSFUL")
+            skip_loop_flag = True
 
-        print(local_index[-1])
+        if not skip_loop_flag:
 
-        local_index = sorted(local_index, key=lambda x: x['chapter_uid'])
-        remote_index = sorted(remote_index, key=lambda x: x['chapter_uid'])
+            with open('datastores/index_scrape_results.json', 'w', encoding='utf-8') as json_file:
+                json_file.write(json.dumps(scrape_results, ensure_ascii=False, indent=4))
 
-        processed_remote_index = []
-        for entry in remote_index:
-            del entry['id']
-            del entry['upload_timestamp']
-            processed_remote_index.append(entry)
+            with open('datastores/index_scrape_results.json', 'r', encoding='utf-8') as index_scrape_file:
+                index_scrape_results = json.loads(index_scrape_file.read())
 
-        print(processed_remote_index[-1])
+            local_index = []
 
-        # CHECK FOR DIFFERENCES
-        mismatched_entries = []
+            for index_page in index_scrape_results:
+                if index_page['scrape_results']['.index_box']:
+                    parse_results = parse_narou_index_html(index_page['scrape_results']['.index_box'])
+                    for parse_result in parse_results:
+                        parse_result['scraped_timestamp'] = scrape_timestamp
+                        local_index.append(parse_result)
+            print('\nLocal Index compiled\n')
 
-        # Determine the length to iterate through
-        min_length = min(len(local_index), len(remote_index))
+            try:
+                remote_index = await get_index_from_d1_db_api()
+                print('\nRemote Index obtained\n')
+            except Exception as e:
+                logger.error('COULD NOT OBTAIN REMOTE INDEX FROM API. Exiting to next iteration')
+                continue
 
-        if min_length == 0:
-            mismatched_entries = local_index
-        else:
-            # Compare elements in the range of the shorter list's length
-            for local_entry, remote_entry in zip(local_index, remote_index):
-                uid_check = bool(local_entry['chapter_uid'] == remote_entry['chapter_uid'])
-                edit_check = bool(local_entry['chapter_edited'] == remote_entry['chapter_edited'])
-                edit_timestamp_check = bool(local_entry['edit_timestamp'] == remote_entry['edit_timestamp'])
+            print(local_index[-1])
 
-                if uid_check and edit_check and edit_timestamp_check:
+            local_index = sorted(local_index, key=lambda x: x['chapter_uid'])
+            remote_index = sorted(remote_index, key=lambda x: x['chapter_uid'])
+
+            processed_remote_index = []
+            for entry in remote_index:
+                del entry['id']
+                del entry['upload_timestamp']
+                processed_remote_index.append(entry)
+
+            print(processed_remote_index[-1])
+
+            # CHECK FOR DIFFERENCES
+            mismatched_entries = []
+
+            # Determine the length to iterate through
+            min_length = min(len(local_index), len(remote_index))
+
+            if min_length == 0:
+                mismatched_entries = local_index
+            else:
+                # Compare elements in the range of the shorter list's length
+                for local_entry, remote_entry in zip(local_index, remote_index):
+                    uid_check = bool(local_entry['chapter_uid'] == remote_entry['chapter_uid'])
+                    edit_check = bool(local_entry['chapter_edited'] == remote_entry['chapter_edited'])
+                    edit_timestamp_check = bool(local_entry['edit_timestamp'] == remote_entry['edit_timestamp'])
+
+                    if uid_check and edit_check and edit_timestamp_check:
+                        continue
+                    else:
+                        mismatched_entries.append(local_entry)
+
+            # Add remaining elements from the longer list if there are any
+            if len(local_index) > len(remote_index):
+                mismatched_entries.extend(local_index[min_length:])
+            elif len(remote_index) > len(local_index):
+                mismatched_entries.extend(remote_index[min_length:])
+
+            print(f'\nMismatched Entries: {mismatched_entries}\n')
+
+            print(f'\nMismatched Entry Count = {len(mismatched_entries)}\n')
+
+            if mismatched_entries:
+
+                urls_to_scrape = [index_entry['narou_link'] for index_entry in mismatched_entries]
+
+                query_selectors = ['.novel_subtitle', '#novel_honbun']
+
+                instructions_list = [ScrapeInstruction(url, query_selectors) for url in urls_to_scrape]
+
+                chapter_scrape_timestamp = get_current_unix_timestamp()
+
+                try:
+                    scrape_results = await async_scrape_url_list(instructions_list)
+                except:
+                    logger.error('CHAPTER SCRAPE FAILED. Exiting to next iteration.')
                     continue
-                else:
-                    mismatched_entries.append(local_entry)
 
-        # Add remaining elements from the longer list if there are any
-        if len(local_index) > len(remote_index):
-            mismatched_entries.extend(local_index[min_length:])
-        elif len(remote_index) > len(local_index):
-            mismatched_entries.extend(remote_index[min_length:])
+                for scrape_result in scrape_results:
+                    with open(f'datastores/chapters/{to_filename_friendly(scrape_result["scraped_url"])}.json', 'w', encoding='utf-8') as chapter_scrape_savefile:
+                        chapter_scrape_savefile.write(json.dumps(scrape_result, ensure_ascii=False, indent=4))
 
-        print(f'\nMismatched Entries: {mismatched_entries}\n')
+                # chapter_file_list = list_files(os.path.join(os.getcwd(), 'datastores', 'chapters'))
+                #
+                # scrape_results = []
+                # for chapter_file in chapter_file_list:
+                #     with open(chapter_file, 'r', encoding='utf-8') as chapter_scrape_json:
+                #         scrape_results.append(json.loads(chapter_scrape_json.read()))
 
-        print(f'\nMismatched Entry Count = {len(mismatched_entries)}\n')
+                chapter_parse_results = [parse_narou_chapter_html(scrape_result) for scrape_result in scrape_results]
 
-        if mismatched_entries:
+                for chapter_parse_result in chapter_parse_results:
+                    chapter_parse_result['scraped_timestamp'] = chapter_scrape_timestamp
 
-            urls_to_scrape = [index_entry['narou_link'] for index_entry in mismatched_entries]
+                print(f'CHAPTER PARSE RESULTS:\n{chapter_parse_results}\n')
 
-            query_selectors = ['.novel_subtitle', '#novel_honbun']
+                # Update Chapters
+                try:
+                    tasks = [post_chapter_to_d1_db_api(chapter_parse_result) for chapter_parse_result in chapter_parse_results]
+                    await asyncio.gather(*tasks)
+                except:
+                    logger.error('CHAPTER PUT TO CF DB FAILED. Exiting to next iteration.')
+                    continue
 
-            instructions_list = [ScrapeInstruction(url, query_selectors) for url in urls_to_scrape]
+                # Update Index
+                try:
+                    tasks = [post_to_index_on_d1_db_api(index_entry) for index_entry in mismatched_entries]
+                    await asyncio.gather(*tasks)
+                except:
+                    logger.error('INDEX UPDATE ON CF DB FAILED. Exiting to next iteration.')
+                    continue
 
-            chapter_scrape_timestamp = get_current_unix_timestamp()
-
-            try:
-                scrape_results = await async_scrape_url_list(instructions_list)
-            except:
-                logger.error('CHAPTER SCRAPE FAILED. Exiting to next iteration.')
-                continue
-
-            for scrape_result in scrape_results:
-                with open(f'datastores/chapters/{to_filename_friendly(scrape_result["scraped_url"])}.json', 'w', encoding='utf-8') as chapter_scrape_savefile:
-                    chapter_scrape_savefile.write(json.dumps(scrape_result, ensure_ascii=False, indent=4))
-
-            # chapter_file_list = list_files(os.path.join(os.getcwd(), 'datastores', 'chapters'))
-            #
-            # scrape_results = []
-            # for chapter_file in chapter_file_list:
-            #     with open(chapter_file, 'r', encoding='utf-8') as chapter_scrape_json:
-            #         scrape_results.append(json.loads(chapter_scrape_json.read()))
-
-            chapter_parse_results = [parse_narou_chapter_html(scrape_result) for scrape_result in scrape_results]
-
-            for chapter_parse_result in chapter_parse_results:
-                chapter_parse_result['scraped_timestamp'] = chapter_scrape_timestamp
-
-            print(f'CHAPTER PARSE RESULTS:\n{chapter_parse_results}\n')
-
-            # Update Chapters
-            try:
-                tasks = [post_chapter_to_d1_db_api(chapter_parse_result) for chapter_parse_result in chapter_parse_results]
-                await asyncio.gather(*tasks)
-            except:
-                logger.error('CHAPTER PUT TO CF DB FAILED. Exiting to next iteration.')
-                continue
-
-            # Update Index
-            try:
-                tasks = [post_to_index_on_d1_db_api(index_entry) for index_entry in mismatched_entries]
-                await asyncio.gather(*tasks)
-            except:
-                logger.error('INDEX UPDATE ON CF DB FAILED. Exiting to next iteration.')
-                continue
-
-        else:
-            logger.info('No new/modified entries found')
+            else:
+                logger.info('No new/modified entries found')
 
         sleep_with_progress(900)
 
