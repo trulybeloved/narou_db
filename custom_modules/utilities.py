@@ -108,3 +108,5 @@ def sleep_with_progress(sleep_interval):
     for i in tqdm(range(sleep_interval), desc="Sleeping", unit="sec"):
         time.sleep(1)
 
+def remove_whitespace(s):
+    return re.sub(r'\s+', '', s)

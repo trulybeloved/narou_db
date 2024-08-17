@@ -3,16 +3,27 @@ import json
 import os
 
 from loguru import logger
+from dotenv import load_dotenv
+from discord_webhook import DiscordWebhook
 
 from custom_modules.utilities import get_current_unix_timestamp, to_filename_friendly, list_files, sleep_with_progress
 from custom_modules.narou_parser import parse_narou_index_html, parse_narou_chapter_html
 from custom_modules.requester import get_index_from_d1_db_api, post_to_index_on_d1_db_api, post_chapter_to_d1_db_api
 from custom_modules.webscraper import ScrapeInstruction, async_scrape_url_list
-from dotenv import load_dotenv
+from custom_modules.discord_integration import send_discord_message, DISCORD_WEBHOOK_URL
 
 async def main():
 
     load_dotenv()
+
+    send_discord_message('NarouDB autorun has been initiated', ping=False)
+    discord_status_webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=f"Autorun loop started: <t:{get_current_unix_timestamp()}>")
+
+    try:
+        discord_status_webhook.execute()
+    except Exception as e:
+        logger.error(f'Error during discord webhook call: {e}')
+        pass
 
     while True:
 
@@ -111,6 +122,8 @@ async def main():
 
             if mismatched_entries:
 
+                send_discord_message(message=f'NarouDB autorun has found mismatched entries:\n\n{mismatched_entries}', ping=True)
+
                 urls_to_scrape = [index_entry['narou_link'] for index_entry in mismatched_entries]
 
                 query_selectors = ['.novel_subtitle', '#novel_honbun']
@@ -161,6 +174,17 @@ async def main():
 
             else:
                 logger.info('No new/modified entries found')
+                discord_status_webhook.content = f'Last successful autorun loop: <t:{get_current_unix_timestamp()}> (<t:{get_current_unix_timestamp()}:R>)'
+
+                try:
+                    discord_status_webhook.edit()
+                except Exception as e:
+                    try:
+                        discord_status_webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=f"Autorun loop started: <t:{get_current_unix_timestamp()}>")
+                        discord_status_webhook.execute()
+                    except Exception as e:
+                        pass
+                # send_discord_message(message='Narou Index for Re:ZERO scraped. No new/modified entries found', ping=False)
 
         sleep_with_progress(900)
 
