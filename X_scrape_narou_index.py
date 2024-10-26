@@ -16,7 +16,7 @@ async def scrape_narou_index():
         'https://ncode.syosetu.com/n2267be/?p=7',
         'https://ncode.syosetu.com/n2267be/?p=8',
     ]
-    query_selectors = ['.index_box']
+    query_selectors = ['.p_eplist']
 
     instructions_list = [ScrapeInstruction(url, query_selectors) for url in url_list]
 

@@ -73,14 +73,17 @@ async def main():
             try:
                 remote_index = await get_index_from_d1_db_api()
                 print('\nRemote Index obtained\n')
+                # print(remote_index)
             except Exception as e:
                 logger.error('COULD NOT OBTAIN REMOTE INDEX FROM API. Exiting to next iteration')
                 continue
 
-            print(local_index[-1])
+            # print(local_index[-1])
 
             local_index = sorted(local_index, key=lambda x: x['chapter_uid'])
             remote_index = sorted(remote_index, key=lambda x: x['chapter_uid'])
+
+            print(local_index)
 
             processed_remote_index = []
             for entry in remote_index:
@@ -88,7 +91,7 @@ async def main():
                 del entry['upload_timestamp']
                 processed_remote_index.append(entry)
 
-            print(processed_remote_index[-1])
+            # print(processed_remote_index[-1])
 
             # CHECK FOR DIFFERENCES
             mismatched_entries = []
@@ -116,11 +119,11 @@ async def main():
             elif len(remote_index) > len(local_index):
                 mismatched_entries.extend(remote_index[min_length:])
 
-            print(f'\nMismatched Entries: {mismatched_entries}\n')
+            # print(f'\nMismatched Entries: {mismatched_entries}\n')
+            #
+            # print(f'\nMismatched Entry Count = {len(mismatched_entries)}\n')
 
-            print(f'\nMismatched Entry Count = {len(mismatched_entries)}\n')
-
-            if mismatched_entries:
+            if False:
 
                 send_discord_message(message=f'NarouDB autorun has found mismatched entries:\n\n{mismatched_entries}', ping=True)
 
