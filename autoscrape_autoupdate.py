@@ -12,6 +12,13 @@ from custom_modules.requester import get_index_from_d1_db_api, post_to_index_on_
 from custom_modules.webscraper import ScrapeInstruction, async_scrape_url_list
 from custom_modules.discord_integration import send_discord_message, DISCORD_WEBHOOK_URL
 
+NAROU_INDEX_SELECTOR = '.p-eplist'
+INDEX_ENTRY_SELECTOR = '.p-eplist__sublist'
+INDEX_LINK_TITLE_SELECTOR = '.p-eplist__subtitle'
+ENTRY_PUBLISHED_TIMESTAMP_SELECTOR = '.p-eplist__update'
+CHAPTER_TITLE_SELECTOR = '.p-novel__title'
+CHAPTER_TEXT_SELECTOR = '.p-novel__text'
+
 async def main():
 
     load_dotenv()
@@ -19,43 +26,43 @@ async def main():
     send_discord_message('NarouDB autorun has been initiated', ping=False)
     discord_status_webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=f"Autorun loop started: <t:{get_current_unix_timestamp()}>")
 
-    try:
-        discord_status_webhook.execute()
-    except Exception as e:
-        logger.error(f'Error during discord webhook call: {e}')
-        pass
+    # try:
+    #     discord_status_webhook.execute()
+    # except Exception as e:
+    #     logger.error(f'Error during discord webhook call: {e}')
+    #     pass
 
     while True:
 
         skip_loop_flag = False
 
-        url_list = [
-            'https://ncode.syosetu.com/n2267be/?p=1',
-            'https://ncode.syosetu.com/n2267be/?p=2',
-            'https://ncode.syosetu.com/n2267be/?p=3',
-            'https://ncode.syosetu.com/n2267be/?p=4',
-            'https://ncode.syosetu.com/n2267be/?p=5',
-            'https://ncode.syosetu.com/n2267be/?p=6',
-            'https://ncode.syosetu.com/n2267be/?p=7',
-            'https://ncode.syosetu.com/n2267be/?p=8',
-            'https://ncode.syosetu.com/n2267be/?p=9',
-        ]
-
-        query_selectors = ['.index_box']
-
-        instructions_list = [ScrapeInstruction(url, query_selectors) for url in url_list]
-
-        scrape_timestamp = get_current_unix_timestamp()
-        try:
-            scrape_results = await async_scrape_url_list(instructions_list)
-        except Exception as e:
-            logger.error("SCRAPE WAS UNSUCESSFUL")
-            skip_loop_flag = True
+        # url_list = [
+        #     'https://ncode.syosetu.com/n2267be/?p=1',
+        #     'https://ncode.syosetu.com/n2267be/?p=2',
+        #     'https://ncode.syosetu.com/n2267be/?p=3',
+        #     'https://ncode.syosetu.com/n2267be/?p=4',
+        #     'https://ncode.syosetu.com/n2267be/?p=5',
+        #     'https://ncode.syosetu.com/n2267be/?p=6',
+        #     'https://ncode.syosetu.com/n2267be/?p=7',
+        #     'https://ncode.syosetu.com/n2267be/?p=8',
+        #     'https://ncode.syosetu.com/n2267be/?p=9',
+        # ]
+        #
+        # query_selectors = [NAROU_INDEX_SELECTOR]
+        #
+        # instructions_list = [ScrapeInstruction(url, query_selectors) for url in url_list]
+        #
+        # scrape_timestamp = get_current_unix_timestamp()
+        # try:
+        #     scrape_results = await async_scrape_url_list(instructions_list)
+        # except Exception as e:
+        #     logger.error("SCRAPE WAS UNSUCESSFUL")
+        #     skip_loop_flag = True
 
         if not skip_loop_flag:
 
-            with open('datastores/index_scrape_results.json', 'w', encoding='utf-8') as json_file:
-                json_file.write(json.dumps(scrape_results, ensure_ascii=False, indent=4))
+            # with open('datastores/index_scrape_results.json', 'w', encoding='utf-8') as json_file:
+            #     json_file.write(json.dumps(scrape_results, ensure_ascii=False, indent=4))
 
             with open('datastores/index_scrape_results.json', 'r', encoding='utf-8') as index_scrape_file:
                 index_scrape_results = json.loads(index_scrape_file.read())
@@ -63,12 +70,19 @@ async def main():
             local_index = []
 
             for index_page in index_scrape_results:
-                if index_page['scrape_results']['.index_box']:
-                    parse_results = parse_narou_index_html(index_page['scrape_results']['.index_box'])
+                if index_page['scrape_results'][NAROU_INDEX_SELECTOR]:
+                    parse_results = parse_narou_index_html(
+                        index_html=index_page['scrape_results'][NAROU_INDEX_SELECTOR],
+                        index_entry_selector=INDEX_ENTRY_SELECTOR,
+                        entry_published_timestamp_selector=ENTRY_PUBLISHED_TIMESTAMP_SELECTOR)
+                    print(parse_results)
                     for parse_result in parse_results:
                         parse_result['scraped_timestamp'] = scrape_timestamp
                         local_index.append(parse_result)
             print('\nLocal Index compiled\n')
+
+            if not local_index:
+                raise ValueError
 
             try:
                 remote_index = await get_index_from_d1_db_api()
@@ -78,7 +92,7 @@ async def main():
                 logger.error('COULD NOT OBTAIN REMOTE INDEX FROM API. Exiting to next iteration')
                 continue
 
-            # print(local_index[-1])
+            print(local_index[0])
 
             local_index = sorted(local_index, key=lambda x: x['chapter_uid'])
             remote_index = sorted(remote_index, key=lambda x: x['chapter_uid'])
@@ -159,21 +173,21 @@ async def main():
 
                 print(f'CHAPTER PARSE RESULTS:\n{chapter_parse_results}\n')
 
-                # Update Chapters
-                try:
-                    tasks = [post_chapter_to_d1_db_api(chapter_parse_result) for chapter_parse_result in chapter_parse_results]
-                    await asyncio.gather(*tasks)
-                except:
-                    logger.error('CHAPTER PUT TO CF DB FAILED. Exiting to next iteration.')
-                    continue
-
-                # Update Index
-                try:
-                    tasks = [post_to_index_on_d1_db_api(index_entry) for index_entry in mismatched_entries]
-                    await asyncio.gather(*tasks)
-                except:
-                    logger.error('INDEX UPDATE ON CF DB FAILED. Exiting to next iteration.')
-                    continue
+                # # Update Chapters
+                # try:
+                #     tasks = [post_chapter_to_d1_db_api(chapter_parse_result) for chapter_parse_result in chapter_parse_results]
+                #     await asyncio.gather(*tasks)
+                # except:
+                #     logger.error('CHAPTER PUT TO CF DB FAILED. Exiting to next iteration.')
+                #     continue
+                #
+                # # Update Index
+                # try:
+                #     tasks = [post_to_index_on_d1_db_api(index_entry) for index_entry in mismatched_entries]
+                #     await asyncio.gather(*tasks)
+                # except:
+                #     logger.error('INDEX UPDATE ON CF DB FAILED. Exiting to next iteration.')
+                #     continue
 
             else:
                 logger.info('No new/modified entries found')
@@ -194,3 +208,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+    # pass

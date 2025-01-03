@@ -114,12 +114,12 @@ def parse_chapter_body(chapter_html: str) -> str:
     return chapter_text
 
 
-def parse_narou_chapter_html(scraper_result: dict) -> dict:
+def parse_narou_chapter_html(scraper_result: dict, chapter_title_selector: str, chapter_text_selector: str) -> dict:
     parse_result = {}
     parse_result['narou_link'] = scraper_result['scraped_url']
     parse_result['chapter_uid'] = str(scraper_result['scraped_url']).replace(
         'https://ncode.syosetu.com/n2267be/', '').replace('/', '')
-    chapter_title = BeautifulSoup(scraper_result['scrape_results']['.novel_subtitle'], 'html.parser').text
+    chapter_title = BeautifulSoup(scraper_result['scrape_results'][chapter_title_selector], 'html.parser').text
     parse_result['chapter_title'] = chapter_title
     chapter_title_parse_results = parse_chapter_title(chapter_title)
     parse_result['chapter_id'] = generate_chapter_id(chapter_title_parse_results)
@@ -127,30 +127,36 @@ def parse_narou_chapter_html(scraper_result: dict) -> dict:
 
     chapter_text = str()
     # chapter_text += f'{chapter_title}\n\n'
-    chapter_text += parse_chapter_body(scraper_result['scrape_results']['#novel_honbun'])
+    chapter_text += parse_chapter_body(scraper_result['scrape_results'][chapter_text_selector])
     parse_result['chapter_body'] = chapter_text
 
     return parse_result
 
 
-def parse_narou_index_html(index_html) -> list:
+def parse_narou_index_html(index_html, index_entry_selector: str, entry_published_timestamp_selector) -> list:
+
 
     index_soup = BeautifulSoup(index_html, 'html.parser')
 
-    index_entries = index_soup.find_all('dl')
+    print(index_soup)
+    print(index_soup.find_all('.p-eplist'))
+    print(index_soup.find('div').get(key='class'))
 
+    index_entries = index_soup.find_all('.p-eplist__sublist')
+    print(f'Index Entries: {index_entries}')
     parse_results = []
 
     for index_entry in index_entries:
 
         chapter_entry = {}
         entry_soup = BeautifulSoup(str(index_entry), 'html.parser')
+        print(entry_soup)
 
-        chapter_title = entry_soup.find('dd').text.strip()
+        chapter_title = entry_soup.find('a').text.strip()
         chapter_href = entry_soup.find('a').get(key='href')
         chapter_uid = int(chapter_href.replace('/n2267be/', '').replace('/', '').strip())
         chapter_url = f'https://ncode.syosetu.com{chapter_href}'
-        chapter_timestamp_string = entry_soup.find('dt').text.strip()
+        chapter_timestamp_string = entry_soup.find(entry_published_timestamp_selector).text.strip()
         chapter_published_timestamp = chapter_timestamp_string.replace('（改）', '').strip()
         chapter_published_unix_timestamp = convert_to_unix_timestamp(chapter_published_timestamp, 9)
 
@@ -170,9 +176,30 @@ def parse_narou_index_html(index_html) -> list:
         chapter_entry['chapter_edited'] = 1 if chapter_edited else 0
         chapter_entry['edit_timestamp'] = chapter_edited_unix_timestamp if chapter_edited_unix_timestamp else 0
 
-        # pprint.pp(chapter_entry)
+        pprint.pp(chapter_entry)
 
         parse_results.append(chapter_entry)
 
     return parse_results
 
+if __name__ == "__main__":
+    import json
+
+    NAROU_INDEX_SELECTOR = '.p-eplist'
+    INDEX_ENTRY_SELECTOR = '.p-eplist__sublist'
+    INDEX_LINK_TITLE_SELECTOR = '.p-eplist__subtitle'
+    ENTRY_PUBLISHED_TIMESTAMP_SELECTOR = '.p-eplist__update'
+    CHAPTER_TITLE_SELECTOR = '.p-novel__title'
+    CHAPTER_TEXT_SELECTOR = '.p-novel__text'
+
+    with open('C:\\Users\\Toshiro\\Desktop\\NarouDB\\narou_db\\datastores\\index_scrape_results.json', 'r', encoding='utf-8') as index_scrape_file:
+        index_scrape_results = json.loads(index_scrape_file.read())
+
+    for index_page in index_scrape_results:
+        if index_page['scrape_results'][NAROU_INDEX_SELECTOR]:
+            parse_results = parse_narou_index_html(
+                index_html=index_page['scrape_results'][NAROU_INDEX_SELECTOR],
+                index_entry_selector=INDEX_ENTRY_SELECTOR,
+                entry_published_timestamp_selector=ENTRY_PUBLISHED_TIMESTAMP_SELECTOR)
+            print(parse_results)
+            break
