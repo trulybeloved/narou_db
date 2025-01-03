@@ -14,15 +14,15 @@ async def scrape_all_chapters():
     complete_index_parse_results = []
 
     for index_page in index_scrape_results:
-        if index_page['scrape_results']['.index_box']:
-            parse_results = parse_narou_index_html(index_page['scrape_results']['.index_box'])
+        if index_page['scrape_results']['.p-eplist']:
+            parse_results = parse_narou_index_html(index_page['scrape_results']['.p-eplist'])
             for parse_result in parse_results:
                 parse_result['scraped_timestamp'] = scrape_timestamp
                 complete_index_parse_results.append(parse_result)
 
     chapter_links = [parse_result['narou_link'] for parse_result in complete_index_parse_results]
 
-    query_selectors = ['.novel_subtitle', '#novel_honbun']
+    query_selectors = ['.p-novel__title', '.p-novel__body']
 
     instructions_list = [ScrapeInstruction(url, query_selectors) for url in chapter_links]
 
@@ -31,8 +31,8 @@ async def scrape_all_chapters():
     with open('datastores/chapter_scrape_resuslt.json', 'w', encoding='utf-8') as json_file:
         json_file.write(json.dumps(scrape_results, ensure_ascii=False, indent=4))
 
-    Git.git_commit_all(os.getcwd(), 'automated commit')
-    Git.git_push(os.getcwd(), 'master')
+    # Git.git_commit_all(os.getcwd(), 'automated commit')
+    # Git.git_push(os.getcwd(), 'master')
 
     return scrape_results
 
