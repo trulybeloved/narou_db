@@ -22,7 +22,7 @@ async def scrape_all_chapters():
 
     chapter_links = [parse_result['narou_link'] for parse_result in complete_index_parse_results]
 
-    query_selectors = ['.p-novel__title', '.p-novel__body']
+    query_selectors = ['.p-novel__title', '.p-novel__text']
 
     instructions_list = [ScrapeInstruction(url, query_selectors) for url in chapter_links]
 
