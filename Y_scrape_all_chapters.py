@@ -15,7 +15,7 @@ async def scrape_all_chapters():
 
     for index_page in index_scrape_results:
         if index_page['scrape_results']['.p-eplist']:
-            parse_results = parse_narou_index_html(index_page['scrape_results']['.p-eplist'])
+            parse_results = parse_narou_index_html(index_page['scrape_results']['.p-eplist'], '.p-eplist__sublist', '.p-eplist__update')
             for parse_result in parse_results:
                 parse_result['scraped_timestamp'] = scrape_timestamp
                 complete_index_parse_results.append(parse_result)
