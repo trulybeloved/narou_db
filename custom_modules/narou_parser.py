@@ -145,7 +145,7 @@ def parse_narou_index_html(index_html, index_entry_class_name: str, entry_publis
     # print(index_soup.find_all('.p-eplist'))
     # print(index_soup.find('div').get(key='class'))
 
-    index_entries = index_soup.find_all('div', class_=index_entry_class_name)
+    index_entries = index_soup.find_all('div', class_=index_entry_class_name.replace('.', ''))
     print(f'Index Entries: {len(index_entries)}')
     parse_results = []
 
@@ -159,7 +159,7 @@ def parse_narou_index_html(index_html, index_entry_class_name: str, entry_publis
         chapter_href = entry_soup.find('a').get(key='href')
         chapter_uid = int(chapter_href.replace('/n2267be/', '').replace('/', '').strip())
         chapter_url = f'https://ncode.syosetu.com{chapter_href}'
-        chapter_timestamp_string = entry_soup.find('div', class_=entry_published_timestamp_class_name).text.strip()
+        chapter_timestamp_string = entry_soup.find('div', class_=entry_published_timestamp_class_name.replace('.', '')).text.strip()
         chapter_published_timestamp = chapter_timestamp_string.replace('（改）', '').strip()
         chapter_published_unix_timestamp = convert_to_unix_timestamp(chapter_published_timestamp, 9)
 
@@ -189,9 +189,9 @@ if __name__ == "__main__":
     import json
 
     NAROU_INDEX_SELECTOR = '.p-eplist'
-    INDEX_ENTRY_CLASS_NAME = 'p-eplist__sublist'
+    INDEX_ENTRY_CLASS_NAME = '.p-eplist__sublist'
     INDEX_LINK_TITLE_SELECTOR = '.p-eplist__subtitle'
-    ENTRY_PUBLISHED_TIMESTAMP_CLASS_NAME = 'p-eplist__update'
+    ENTRY_PUBLISHED_TIMESTAMP_CLASS_NAME = '.p-eplist__update'
     CHAPTER_TITLE_SELECTOR = '.p-novel__title'
     CHAPTER_TEXT_SELECTOR = '.p-novel__text'
 

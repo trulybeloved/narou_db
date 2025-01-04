@@ -36,28 +36,28 @@ async def main():
 
         skip_loop_flag = False
 
-        # url_list = [
-        #     'https://ncode.syosetu.com/n2267be/?p=1',
-        #     'https://ncode.syosetu.com/n2267be/?p=2',
-        #     'https://ncode.syosetu.com/n2267be/?p=3',
-        #     'https://ncode.syosetu.com/n2267be/?p=4',
-        #     'https://ncode.syosetu.com/n2267be/?p=5',
-        #     'https://ncode.syosetu.com/n2267be/?p=6',
-        #     'https://ncode.syosetu.com/n2267be/?p=7',
-        #     'https://ncode.syosetu.com/n2267be/?p=8',
-        #     'https://ncode.syosetu.com/n2267be/?p=9',
-        # ]
-        #
-        # query_selectors = [NAROU_INDEX_SELECTOR]
-        #
-        # instructions_list = [ScrapeInstruction(url, query_selectors) for url in url_list]
-        #
-        # scrape_timestamp = get_current_unix_timestamp()
-        # try:
-        #     scrape_results = await async_scrape_url_list(instructions_list)
-        # except Exception as e:
-        #     logger.error("SCRAPE WAS UNSUCESSFUL")
-        #     skip_loop_flag = True
+        url_list = [
+            'https://ncode.syosetu.com/n2267be/?p=1',
+            'https://ncode.syosetu.com/n2267be/?p=2',
+            'https://ncode.syosetu.com/n2267be/?p=3',
+            'https://ncode.syosetu.com/n2267be/?p=4',
+            'https://ncode.syosetu.com/n2267be/?p=5',
+            'https://ncode.syosetu.com/n2267be/?p=6',
+            'https://ncode.syosetu.com/n2267be/?p=7',
+            'https://ncode.syosetu.com/n2267be/?p=8',
+            'https://ncode.syosetu.com/n2267be/?p=9',
+        ]
+
+        query_selectors = [NAROU_INDEX_SELECTOR]
+
+        instructions_list = [ScrapeInstruction(url, query_selectors) for url in url_list]
+
+        scrape_timestamp = get_current_unix_timestamp()
+        try:
+            scrape_results = await async_scrape_url_list(instructions_list)
+        except Exception as e:
+            logger.error("SCRAPE WAS UNSUCESSFUL")
+            skip_loop_flag = True
 
         if not skip_loop_flag:
 
@@ -87,7 +87,7 @@ async def main():
             try:
                 remote_index = await get_index_from_d1_db_api()
                 print('\nRemote Index obtained\n')
-                # print(remote_index)
+                print(remote_index)
             except Exception as e:
                 logger.error('COULD NOT OBTAIN REMOTE INDEX FROM API. Exiting to next iteration')
                 continue
@@ -97,7 +97,7 @@ async def main():
             local_index = sorted(local_index, key=lambda x: x['chapter_uid'])
             remote_index = sorted(remote_index, key=lambda x: x['chapter_uid'])
 
-            print(local_index)
+            # print(local_index)
 
             processed_remote_index = []
             for entry in remote_index:
@@ -133,17 +133,17 @@ async def main():
             elif len(remote_index) > len(local_index):
                 mismatched_entries.extend(remote_index[min_length:])
 
-            # print(f'\nMismatched Entries: {mismatched_entries}\n')
-            #
-            # print(f'\nMismatched Entry Count = {len(mismatched_entries)}\n')
+            print(f'\nMismatched Entries: {mismatched_entries}\n')
 
-            if False:
+            print(f'\nMismatched Entry Count = {len(mismatched_entries)}\n')
+
+            if mismatched_entries:
 
                 send_discord_message(message=f'NarouDB autorun has found mismatched entries:\n\n{mismatched_entries}', ping=True)
 
                 urls_to_scrape = [index_entry['narou_link'] for index_entry in mismatched_entries]
 
-                query_selectors = ['.novel_subtitle', '#novel_honbun']
+                query_selectors = [CHAPTER_TITLE_SELECTOR, CHAPTER_TEXT_SELECTOR]
 
                 instructions_list = [ScrapeInstruction(url, query_selectors) for url in urls_to_scrape]
 
@@ -166,7 +166,7 @@ async def main():
                 #     with open(chapter_file, 'r', encoding='utf-8') as chapter_scrape_json:
                 #         scrape_results.append(json.loads(chapter_scrape_json.read()))
 
-                chapter_parse_results = [parse_narou_chapter_html(scrape_result) for scrape_result in scrape_results]
+                chapter_parse_results = [parse_narou_chapter_html(scrape_result, CHAPTER_TITLE_SELECTOR, CHAPTER_TEXT_SELECTOR) for scrape_result in scrape_results]
 
                 for chapter_parse_result in chapter_parse_results:
                     chapter_parse_result['scraped_timestamp'] = chapter_scrape_timestamp
