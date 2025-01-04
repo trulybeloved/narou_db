@@ -144,6 +144,6 @@ async def async_scrape_url_list(scrape_instructions_list: list[ScrapeInstruction
 
 
 if __name__ == "__main__":
-    index_url = "https://ncode.syosetu.com/n2267be/?p=7"
-    index_scrape_results = sync_playwright_webscrape(index_url, ['.p-eplist'])
+    index_url = "https://ncode.syosetu.com/n2267be/1/"
+    index_scrape_results = sync_playwright_webscrape(index_url, ['.p-novel__text'])
     print(index_scrape_results)

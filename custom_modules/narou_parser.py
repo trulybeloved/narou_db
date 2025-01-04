@@ -1,3 +1,5 @@
+import os.path
+
 from bs4 import BeautifulSoup
 from custom_modules.utilities import convert_to_unix_timestamp
 import pprint
@@ -133,30 +135,31 @@ def parse_narou_chapter_html(scraper_result: dict, chapter_title_selector: str, 
     return parse_result
 
 
-def parse_narou_index_html(index_html, index_entry_selector: str, entry_published_timestamp_selector) -> list:
+def parse_narou_index_html(index_html, index_entry_class_name: str, entry_published_timestamp_class_name) -> list:
 
+    # print(index_html)
 
     index_soup = BeautifulSoup(index_html, 'html.parser')
 
-    print(index_soup)
-    print(index_soup.find_all('.p-eplist'))
-    print(index_soup.find('div').get(key='class'))
+    # print(index_soup)
+    # print(index_soup.find_all('.p-eplist'))
+    # print(index_soup.find('div').get(key='class'))
 
-    index_entries = index_soup.find_all('.p-eplist__sublist')
-    print(f'Index Entries: {index_entries}')
+    index_entries = index_soup.find_all('div', class_=index_entry_class_name)
+    print(f'Index Entries: {len(index_entries)}')
     parse_results = []
 
     for index_entry in index_entries:
 
         chapter_entry = {}
         entry_soup = BeautifulSoup(str(index_entry), 'html.parser')
-        print(entry_soup)
+        # print(entry_soup)
 
         chapter_title = entry_soup.find('a').text.strip()
         chapter_href = entry_soup.find('a').get(key='href')
         chapter_uid = int(chapter_href.replace('/n2267be/', '').replace('/', '').strip())
         chapter_url = f'https://ncode.syosetu.com{chapter_href}'
-        chapter_timestamp_string = entry_soup.find(entry_published_timestamp_selector).text.strip()
+        chapter_timestamp_string = entry_soup.find('div', class_=entry_published_timestamp_class_name).text.strip()
         chapter_published_timestamp = chapter_timestamp_string.replace('（改）', '').strip()
         chapter_published_unix_timestamp = convert_to_unix_timestamp(chapter_published_timestamp, 9)
 
@@ -186,20 +189,21 @@ if __name__ == "__main__":
     import json
 
     NAROU_INDEX_SELECTOR = '.p-eplist'
-    INDEX_ENTRY_SELECTOR = '.p-eplist__sublist'
+    INDEX_ENTRY_CLASS_NAME = 'p-eplist__sublist'
     INDEX_LINK_TITLE_SELECTOR = '.p-eplist__subtitle'
-    ENTRY_PUBLISHED_TIMESTAMP_SELECTOR = '.p-eplist__update'
+    ENTRY_PUBLISHED_TIMESTAMP_CLASS_NAME = 'p-eplist__update'
     CHAPTER_TITLE_SELECTOR = '.p-novel__title'
     CHAPTER_TEXT_SELECTOR = '.p-novel__text'
 
-    with open('C:\\Users\\Toshiro\\Desktop\\NarouDB\\narou_db\\datastores\\index_scrape_results.json', 'r', encoding='utf-8') as index_scrape_file:
+    with open(os.path.join('C:\\Users\\prav9\\OneDrive\\Desktop\\Coding\\Projects\\narou_db\\datastores\\index_scrape_results.json'), 'r', encoding='utf-8') as index_scrape_file:
         index_scrape_results = json.loads(index_scrape_file.read())
 
     for index_page in index_scrape_results:
+        print(index_page)
         if index_page['scrape_results'][NAROU_INDEX_SELECTOR]:
             parse_results = parse_narou_index_html(
                 index_html=index_page['scrape_results'][NAROU_INDEX_SELECTOR],
-                index_entry_selector=INDEX_ENTRY_SELECTOR,
-                entry_published_timestamp_selector=ENTRY_PUBLISHED_TIMESTAMP_SELECTOR)
-            print(parse_results)
+                index_entry_class_name=INDEX_ENTRY_CLASS_NAME,
+                entry_published_timestamp_class_name=ENTRY_PUBLISHED_TIMESTAMP_CLASS_NAME)
+            # print(parse_results)
             break

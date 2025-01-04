@@ -73,8 +73,8 @@ async def main():
                 if index_page['scrape_results'][NAROU_INDEX_SELECTOR]:
                     parse_results = parse_narou_index_html(
                         index_html=index_page['scrape_results'][NAROU_INDEX_SELECTOR],
-                        index_entry_selector=INDEX_ENTRY_SELECTOR,
-                        entry_published_timestamp_selector=ENTRY_PUBLISHED_TIMESTAMP_SELECTOR)
+                        index_entry_class_name=INDEX_ENTRY_SELECTOR,
+                        entry_published_timestamp_class_name=ENTRY_PUBLISHED_TIMESTAMP_SELECTOR)
                     print(parse_results)
                     for parse_result in parse_results:
                         parse_result['scraped_timestamp'] = scrape_timestamp
