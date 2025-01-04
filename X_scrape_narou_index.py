@@ -5,6 +5,8 @@ import os
 from custom_modules.utilities import Git
 from custom_modules.webscraper import ScrapeInstruction, async_scrape_url_list
 
+from autoscrape_autoupdate import NAROU_INDEX_SELECTOR
+
 async def scrape_narou_index():
     url_list = [
         'https://ncode.syosetu.com/n2267be/?p=1',
@@ -16,7 +18,8 @@ async def scrape_narou_index():
         'https://ncode.syosetu.com/n2267be/?p=7',
         'https://ncode.syosetu.com/n2267be/?p=8',
     ]
-    query_selectors = ['.p-eplist']
+
+    query_selectors = [NAROU_INDEX_SELECTOR]
 
     instructions_list = [ScrapeInstruction(url, query_selectors) for url in url_list]
 

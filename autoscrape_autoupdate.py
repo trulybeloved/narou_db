@@ -26,11 +26,11 @@ async def main():
     send_discord_message('NarouDB autorun has been initiated', ping=False)
     discord_status_webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=f"Autorun loop started: <t:{get_current_unix_timestamp()}>")
 
-    # try:
-    #     discord_status_webhook.execute()
-    # except Exception as e:
-    #     logger.error(f'Error during discord webhook call: {e}')
-    #     pass
+    try:
+        discord_status_webhook.execute()
+    except Exception as e:
+        logger.error(f'Error during discord webhook call: {e}')
+        pass
 
     while True:
 
@@ -173,21 +173,21 @@ async def main():
 
                 print(f'CHAPTER PARSE RESULTS:\n{chapter_parse_results}\n')
 
-                # # Update Chapters
-                # try:
-                #     tasks = [post_chapter_to_d1_db_api(chapter_parse_result) for chapter_parse_result in chapter_parse_results]
-                #     await asyncio.gather(*tasks)
-                # except:
-                #     logger.error('CHAPTER PUT TO CF DB FAILED. Exiting to next iteration.')
-                #     continue
-                #
-                # # Update Index
-                # try:
-                #     tasks = [post_to_index_on_d1_db_api(index_entry) for index_entry in mismatched_entries]
-                #     await asyncio.gather(*tasks)
-                # except:
-                #     logger.error('INDEX UPDATE ON CF DB FAILED. Exiting to next iteration.')
-                #     continue
+                # Update Chapters
+                try:
+                    tasks = [post_chapter_to_d1_db_api(chapter_parse_result) for chapter_parse_result in chapter_parse_results]
+                    await asyncio.gather(*tasks)
+                except:
+                    logger.error('CHAPTER PUT TO CF DB FAILED. Exiting to next iteration.')
+                    continue
+
+                # Update Index
+                try:
+                    tasks = [post_to_index_on_d1_db_api(index_entry) for index_entry in mismatched_entries]
+                    await asyncio.gather(*tasks)
+                except:
+                    logger.error('INDEX UPDATE ON CF DB FAILED. Exiting to next iteration.')
+                    continue
 
             else:
                 logger.info('No new/modified entries found')

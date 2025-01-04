@@ -198,12 +198,18 @@ if __name__ == "__main__":
     with open(os.path.join('C:\\Users\\prav9\\OneDrive\\Desktop\\Coding\\Projects\\narou_db\\datastores\\index_scrape_results.json'), 'r', encoding='utf-8') as index_scrape_file:
         index_scrape_results = json.loads(index_scrape_file.read())
 
+    index_entries = []
+
     for index_page in index_scrape_results:
-        print(index_page)
+        # print(index_page)
         if index_page['scrape_results'][NAROU_INDEX_SELECTOR]:
             parse_results = parse_narou_index_html(
                 index_html=index_page['scrape_results'][NAROU_INDEX_SELECTOR],
                 index_entry_class_name=INDEX_ENTRY_CLASS_NAME,
                 entry_published_timestamp_class_name=ENTRY_PUBLISHED_TIMESTAMP_CLASS_NAME)
-            # print(parse_results)
-            break
+            print(parse_results)
+            for result in parse_results:
+                index_entries.append(result)
+
+    with open('index_parse.json', 'w', encoding='utf-8') as parse_file:
+        parse_file.write(json.dumps(index_entries, indent=4, ensure_ascii=False))
