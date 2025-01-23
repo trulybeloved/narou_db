@@ -179,7 +179,7 @@ def parse_narou_index_html(index_html, index_entry_class_name: str, entry_publis
         chapter_entry['chapter_edited'] = 1 if chapter_edited else 0
         chapter_entry['edit_timestamp'] = chapter_edited_unix_timestamp if chapter_edited_unix_timestamp else 0
 
-        pprint.pp(chapter_entry)
+        # pprint.pp(chapter_entry)
 
         parse_results.append(chapter_entry)
 
@@ -207,7 +207,7 @@ if __name__ == "__main__":
                 index_html=index_page['scrape_results'][NAROU_INDEX_SELECTOR],
                 index_entry_class_name=INDEX_ENTRY_CLASS_NAME,
                 entry_published_timestamp_class_name=ENTRY_PUBLISHED_TIMESTAMP_CLASS_NAME)
-            print(parse_results)
+            # print(parse_results)
             for result in parse_results:
                 index_entries.append(result)
 

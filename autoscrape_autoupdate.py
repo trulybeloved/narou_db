@@ -87,7 +87,7 @@ async def main():
             try:
                 remote_index = await get_index_from_d1_db_api()
                 print('\nRemote Index obtained\n')
-                print(remote_index)
+                print(remote_index[0])
             except Exception as e:
                 logger.error('COULD NOT OBTAIN REMOTE INDEX FROM API. Exiting to next iteration')
                 continue

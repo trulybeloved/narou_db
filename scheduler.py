@@ -15,6 +15,7 @@ def run_script():
         return
 
     try:
+
         # Create a lock file
         LOCK_FILE.touch(exist_ok=True)
 
@@ -34,6 +35,10 @@ import schedule
 schedule.every(15).minutes.do(run_script)  # Adjust the interval as needed
 
 if __name__ == "__main__":
+
+    if LOCK_FILE.exists():
+        LOCK_FILE.unlink()
+
     print("Scheduler is starting...")
     if not LOCK_FILE.parent.exists():
         LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
