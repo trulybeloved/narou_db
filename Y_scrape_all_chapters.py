@@ -31,10 +31,9 @@ async def scrape_all_chapters():
     with open('datastores/chapter_scrape_resuslt.json', 'w', encoding='utf-8') as json_file:
         json_file.write(json.dumps(scrape_results, ensure_ascii=False, indent=4))
 
-    Git.git_commit_all(os.getcwd(), 'automated commit')
-    Git.git_push(os.getcwd(), 'master')
-
     return scrape_results
 
 if __name__ == "__main__":
     asyncio.run(scrape_all_chapters())
+    # Git.git_commit_all(os.getcwd(), 'automated commit')
+    # Git.git_push(os.getcwd(), 'master')

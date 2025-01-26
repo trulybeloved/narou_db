@@ -185,6 +185,10 @@ def parse_narou_index_html(index_html, index_entry_class_name: str, entry_publis
 
     return parse_results
 
+def get_narou_uid_from_url(url:str) -> int:
+    return int(url.replace('https://ncode.syosetu.com/n2267be/', '').replace('/',''))
+
+
 if __name__ == "__main__":
     import json
 
@@ -193,7 +197,7 @@ if __name__ == "__main__":
     INDEX_LINK_TITLE_SELECTOR = '.p-eplist__subtitle'
     ENTRY_PUBLISHED_TIMESTAMP_CLASS_NAME = '.p-eplist__update'
     CHAPTER_TITLE_SELECTOR = '.p-novel__title'
-    CHAPTER_TEXT_SELECTOR = '.p-novel__text'
+    CHAPTER_TEXT_SELECTOR = '.p-novel__body'
 
     with open(os.path.join('C:\\Users\\prav9\\OneDrive\\Desktop\\Coding\\Projects\\narou_db\\datastores\\index_scrape_results.json'), 'r', encoding='utf-8') as index_scrape_file:
         index_scrape_results = json.loads(index_scrape_file.read())

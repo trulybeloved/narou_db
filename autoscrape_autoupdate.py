@@ -17,7 +17,7 @@ INDEX_ENTRY_SELECTOR = '.p-eplist__sublist'
 INDEX_LINK_TITLE_SELECTOR = '.p-eplist__subtitle'
 ENTRY_PUBLISHED_TIMESTAMP_SELECTOR = '.p-eplist__update'
 CHAPTER_TITLE_SELECTOR = '.p-novel__title'
-CHAPTER_TEXT_SELECTOR = '.p-novel__text'
+CHAPTER_TEXT_SELECTOR = '.p-novel__body'
 
 async def main():
 

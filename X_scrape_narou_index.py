@@ -30,10 +30,10 @@ async def scrape_narou_index():
 
     print('COMPLETED NAROU INDEX SCRAPE. JSON file saved to datastores/index_scrape_results.json')
 
-    # Git.git_commit_all(os.getcwd(), 'automated commit')
-    # Git.git_push(os.getcwd(), 'master')
-
     return scrape_results
 
 if __name__ == "__main__":
     asyncio.run(scrape_narou_index())
+
+    # Git.git_commit_all(os.getcwd(), 'automated commit')
+    # Git.git_push(os.getcwd(), 'master')
