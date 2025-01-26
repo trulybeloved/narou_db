@@ -61,8 +61,8 @@ async def main():
 
         if not skip_loop_flag:
 
-            # with open('datastores/index_scrape_results.json', 'w', encoding='utf-8') as json_file:
-            #     json_file.write(json.dumps(scrape_results, ensure_ascii=False, indent=4))
+            with open('datastores/index_scrape_results.json', 'w', encoding='utf-8') as json_file:
+                json_file.write(json.dumps(scrape_results, ensure_ascii=False, indent=4))
 
             with open('datastores/index_scrape_results.json', 'r', encoding='utf-8') as index_scrape_file:
                 index_scrape_results = json.loads(index_scrape_file.read())
@@ -75,7 +75,7 @@ async def main():
                         index_html=index_page['scrape_results'][NAROU_INDEX_SELECTOR],
                         index_entry_class_name=INDEX_ENTRY_SELECTOR,
                         entry_published_timestamp_class_name=ENTRY_PUBLISHED_TIMESTAMP_SELECTOR)
-                    print(parse_results)
+                    # print(parse_results)
                     for parse_result in parse_results:
                         parse_result['scraped_timestamp'] = scrape_timestamp
                         local_index.append(parse_result)
@@ -87,7 +87,7 @@ async def main():
             try:
                 remote_index = await get_index_from_d1_db_api()
                 print('\nRemote Index obtained\n')
-                print(remote_index)
+                print(remote_index[0])
             except Exception as e:
                 logger.error('COULD NOT OBTAIN REMOTE INDEX FROM API. Exiting to next iteration')
                 continue
