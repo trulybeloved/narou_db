@@ -9,6 +9,7 @@ with open('datastores/chapter_scrape_resuslt.json', 'r', encoding='utf-8') as ch
 for chapter in chapter_scrape_results:
 
     narou_uid = narou_parser.get_narou_uid_from_url(chapter['scraped_url'])
+    narou_uid = str(narou_uid).zfill(5)
     print(narou_uid)
 
     chapter_title_soup = BeautifulSoup(chapter['scrape_results']['.p-novel__title'], 'html.parser')
@@ -25,5 +26,3 @@ for chapter in chapter_scrape_results:
 
     with open(f'datastores/chapter_raws_html/{narou_uid}.html' , 'w', encoding='utf-8') as raw_html_file:
         raw_html_file.write(chapter_html)
-
-
