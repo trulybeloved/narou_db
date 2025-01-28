@@ -28,7 +28,7 @@ async def scrape_all_chapters():
 
     scrape_results = await async_scrape_url_list(instructions_list)
 
-    with open('datastores/chapter_scrape_resuslt.json', 'w', encoding='utf-8') as json_file:
+    with open('datastores/chapter_scrape_results.json', 'w', encoding='utf-8') as json_file:
         json_file.write(json.dumps(scrape_results, ensure_ascii=False, indent=4))
 
     return scrape_results

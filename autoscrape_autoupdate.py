@@ -6,11 +6,13 @@ from loguru import logger
 from dotenv import load_dotenv
 from discord_webhook import DiscordWebhook
 
-from custom_modules.utilities import get_current_unix_timestamp, to_filename_friendly, list_files, sleep_with_progress
+from custom_modules.utilities import get_current_unix_timestamp, to_filename_friendly, list_files, sleep_with_progress, Git
 from custom_modules.narou_parser import parse_narou_index_html, parse_narou_chapter_html
 from custom_modules.requester import get_index_from_d1_db_api, post_to_index_on_d1_db_api, post_chapter_to_d1_db_api
 from custom_modules.webscraper import ScrapeInstruction, async_scrape_url_list
 from custom_modules.discord_integration import send_discord_message, DISCORD_WEBHOOK_URL
+from U_save_chapters_as_txt import save_chapter
+from V_file_compare import get_differences
 
 NAROU_INDEX_SELECTOR = '.p-eplist'
 INDEX_ENTRY_SELECTOR = '.p-eplist__sublist'
@@ -124,7 +126,11 @@ async def main():
 
                     if uid_check and edit_check and edit_timestamp_check:
                         continue
+                    elif not edit_check or not edit_timestamp_check:
+                        local_entry['mismatch_type'] = 'edit'
+                        mismatched_entries.append(local_entry)
                     else:
+                        local_entry['mismatch_type'] = 'new'
                         mismatched_entries.append(local_entry)
 
             # Add remaining elements from the longer list if there are any
@@ -159,6 +165,7 @@ async def main():
                     with open(f'datastores/chapters/{to_filename_friendly(scrape_result["scraped_url"])}.json', 'w', encoding='utf-8') as chapter_scrape_savefile:
                         chapter_scrape_savefile.write(json.dumps(scrape_result, ensure_ascii=False, indent=4))
 
+
                 # chapter_file_list = list_files(os.path.join(os.getcwd(), 'datastores', 'chapters'))
                 #
                 # scrape_results = []
@@ -169,6 +176,21 @@ async def main():
                 chapter_parse_results = [parse_narou_chapter_html(scrape_result, CHAPTER_TITLE_SELECTOR, CHAPTER_TEXT_SELECTOR) for scrape_result in scrape_results]
 
                 for chapter_parse_result in chapter_parse_results:
+
+                    try:
+                        save_sucess, narou_uid = save_chapter(chapter_parse_result)
+                        repo = os.getcwd()
+                        Git.git_commit_all(repo, f'Chapter Update for {narou_uid}')
+                        for entry in mismatched_entries:
+                            if chapter_parse_result['narou_link'] == entry['narou_link']:
+                                if entry['mismatch_type'] == 'edit':
+                                    formatted_diff_string = get_differences(narou_uid)
+                                    send_discord_message(f'CHAPTER EDITED: {narou_uid}{chapter_parse_result["narou_link"]}', ping=True)
+                                    send_discord_message(formatted_diff_string, ping=False)
+                    except Exception as e:
+                        send_discord_message('FAILED TO GET DIFF', ping=True)
+                        print(e)
+
                     chapter_parse_result['scraped_timestamp'] = chapter_scrape_timestamp
 
                 print(f'CHAPTER PARSE RESULTS:\n{chapter_parse_results}\n')
