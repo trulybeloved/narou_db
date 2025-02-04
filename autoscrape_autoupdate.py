@@ -179,6 +179,7 @@ async def main():
 
                     try:
                         save_sucess, narou_uid = save_chapter(chapter_parse_result)
+                        print('chapter saved')
                         repo = os.getcwd()
                         Git.git_commit_all(repo, f'Chapter Update for {narou_uid}')
                         for entry in mismatched_entries:
