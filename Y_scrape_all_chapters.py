@@ -14,6 +14,7 @@ async def scrape_all_chapters():
     complete_index_parse_results = []
 
     for index_page in index_scrape_results:
+        print(index_page)
         if index_page['scrape_results']['.p-eplist']:
             parse_results = parse_narou_index_html(index_page['scrape_results'][NAROU_INDEX_SELECTOR], INDEX_ENTRY_SELECTOR, ENTRY_PUBLISHED_TIMESTAMP_SELECTOR)
             for parse_result in parse_results:
@@ -24,11 +25,13 @@ async def scrape_all_chapters():
 
     query_selectors = [CHAPTER_TITLE_SELECTOR, CHAPTER_TEXT_SELECTOR]
 
-    instructions_list = [ScrapeInstruction(url, query_selectors) for url in chapter_links]
+    # print(chapter_links)
+
+    instructions_list = [ScrapeInstruction(url, query_selectors) for url in chapter_links[-1:]]
 
     scrape_results = await async_scrape_url_list(instructions_list)
 
-    with open('datastores/chapter_scrape_results.json', 'w', encoding='utf-8') as json_file:
+    with open('datastores/chapter_scrape_results_latest.json', 'w', encoding='utf-8') as json_file:
         json_file.write(json.dumps(scrape_results, ensure_ascii=False, indent=4))
 
     return scrape_results

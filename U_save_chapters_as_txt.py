@@ -48,8 +48,11 @@ def save_chapter(chapter):
 
 if __name__ == "__main__":
 
-    with open(config.ALL_CHAPTERS_SCRAPE_JSON, 'r', encoding='utf-8') as chapter_scrape_results_json:
-        chapter_scrape_results = json.loads(chapter_scrape_results_json.read())
+    # with open(config.ALL_CHAPTERS_SCRAPE_JSON, 'r', encoding='utf-8') as chapter_scrape_results_json:
+    #     chapter_scrape_results = json.loads(chapter_scrape_results_json.read())
+
+    with open('datastores/chapter_scrape_results_latest.json', 'r', encoding='utf-8') as latest_chapter_json:
+        chapter_scrape_results = json.loads(latest_chapter_json.read())
 
     for chapter in chapter_scrape_results:
 
