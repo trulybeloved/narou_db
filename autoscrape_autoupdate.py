@@ -177,20 +177,20 @@ async def main():
 
                 for chapter_parse_result in chapter_parse_results:
 
-                    try:
-                        save_sucess, narou_uid = save_chapter(chapter_parse_result)
-                        print('chapter saved')
-                        repo = os.getcwd()
-                        Git.git_commit_all(repo, f'Chapter Update for {narou_uid}')
-                        for entry in mismatched_entries:
-                            if chapter_parse_result['narou_link'] == entry['narou_link']:
-                                if entry['mismatch_type'] == 'edit':
-                                    formatted_diff_string = get_differences(narou_uid)
-                                    send_discord_message(f'CHAPTER EDITED: {narou_uid}{chapter_parse_result["narou_link"]}', ping=True)
-                                    send_discord_message(formatted_diff_string, ping=False)
-                    except Exception as e:
-                        send_discord_message('FAILED TO GET DIFF', ping=True)
-                        print(e)
+                    # try:
+                    #     save_sucess, narou_uid = save_chapter(chapter_parse_result)
+                    #     print('chapter saved')
+                    #     repo = os.getcwd()
+                    #     Git.git_commit_all(repo, f'Chapter Update for {narou_uid}')
+                    #     for entry in mismatched_entries:
+                    #         if chapter_parse_result['narou_link'] == entry['narou_link']:
+                    #             if entry['mismatch_type'] == 'edit':
+                    #                 formatted_diff_string = get_differences(narou_uid)
+                    #                 send_discord_message(f'CHAPTER EDITED: {narou_uid}{chapter_parse_result["narou_link"]}', ping=True)
+                    #                 send_discord_message(formatted_diff_string, ping=False)
+                    # except Exception as e:
+                    #     send_discord_message('FAILED TO GET DIFF', ping=True)
+                    #     print(e)
 
                     chapter_parse_result['scraped_timestamp'] = chapter_scrape_timestamp
 

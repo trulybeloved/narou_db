@@ -27,11 +27,11 @@ async def scrape_all_chapters():
 
     # print(chapter_links)
 
-    instructions_list = [ScrapeInstruction(url, query_selectors) for url in chapter_links[-1:]]
+    instructions_list = [ScrapeInstruction(url, query_selectors) for url in chapter_links]
 
     scrape_results = await async_scrape_url_list(instructions_list)
 
-    with open('datastores/chapter_scrape_results_latest.json', 'w', encoding='utf-8') as json_file:
+    with open('datastores/chapter_scrape_results.json', 'w', encoding='utf-8') as json_file:
         json_file.write(json.dumps(scrape_results, ensure_ascii=False, indent=4))
 
     return scrape_results
