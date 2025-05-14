@@ -1,6 +1,5 @@
 import typing
 import asyncio
-import sys
 import requests
 from playwright.sync_api import sync_playwright
 from playwright.async_api import async_playwright, Browser
@@ -138,6 +137,7 @@ def sync_playwright_webscrape(
 async def async_scrape_url_list(scrape_instructions_list: list[ScrapeInstruction]):
     tasks = [async_playwright_webscrape(instruction.url, instruction.query_selectors) for instruction in
              scrape_instructions_list]
+
     results = await asyncio.gather(*tasks)
 
     return results
