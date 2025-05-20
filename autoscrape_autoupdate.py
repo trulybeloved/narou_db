@@ -146,12 +146,12 @@ async def main():
 
             if mismatched_entries:
 
-                for entry in mismatched_entries:
-                    try:
-                        entry_details = f"UID: {entry['chapter_uid']}\n{entry['chapter_title']}\n{entry['narou_link']}"
-                        send_discord_message(message=f'NarouDB autorun has found mismatched entries:\n\n{entry_details}', ping=True)
-                    except:
-                        pass
+                # for entry in mismatched_entries:
+                #     try:
+                #         entry_details = f"UID: {entry['chapter_uid']}\n{entry['chapter_title']}\n{entry['narou_link']}"
+                #         send_discord_message(message=f'NarouDB autorun has found mismatched entries:\n\n{entry_details}', ping=True)
+                #     except:
+                #         pass
 
                 urls_to_scrape = [index_entry['narou_link'] for index_entry in mismatched_entries]
 
@@ -189,11 +189,11 @@ async def main():
                         save_sucess, narou_uid = save_chapter(scrape_result)
                         print('chapter saved')
                         uids.append(narou_uid)
-                        for entry in mismatched_entries:
-                            if entry['mismatch_type'] == 'edit':
+                        # for entry in mismatched_entries:
+                            # if entry['mismatch_type'] == 'edit':
                                 # formatted_diff_string = get_differences(narou_uid)
-                                send_discord_message(f'CHAPTER EDITED: {narou_uid}', ping=False)
-                                time.sleep(1)
+                                # send_discord_message(f'CHAPTER EDITED: {narou_uid}', ping=False)
+                                # time.sleep(1)
                                 # send_discord_message(formatted_diff_string, ping=False)
                     except Exception as e:
                         send_discord_message('FAILED TO GET DIFF', ping=False)
