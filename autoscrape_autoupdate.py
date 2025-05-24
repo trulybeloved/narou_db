@@ -146,12 +146,20 @@ async def main():
 
             if mismatched_entries:
 
-                # for entry in mismatched_entries:
-                #     try:
-                #         entry_details = f"UID: {entry['chapter_uid']}\n{entry['chapter_title']}\n{entry['narou_link']}"
-                #         send_discord_message(message=f'NarouDB autorun has found mismatched entries:\n\n{entry_details}', ping=True)
-                #     except:
-                #         pass
+                if len(mismatched_entries) < 5:
+                    for entry in mismatched_entries:
+                        try:
+                            entry_details = f"UID: {entry['chapter_uid']}\n{entry['chapter_title']}\n{entry['narou_link']}"
+                            send_discord_message(message=f'NarouDB autorun has found mismatched entries:\n\n{entry_details}', ping=True)
+                        except:
+                            pass
+                else:
+                    try:
+                        entry_details = f"{len(mismatched_entries)} mismatched entries found"
+                        send_discord_message(message=f'NarouDB autorun has found mismatched entries:\n\n{entry_details}', ping=True)
+                    except:
+                        pass
+
 
                 urls_to_scrape = [index_entry['narou_link'] for index_entry in mismatched_entries]
 
