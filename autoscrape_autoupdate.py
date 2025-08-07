@@ -209,6 +209,7 @@ async def main():
 
                 repo = os.getcwd()
                 Git.git_commit_all(repo, f'Chapter Update for {", ".join(map(str, uids))}')
+                # Git.git_push(repo)
                 for chapter_parse_result in chapter_parse_results:
                     chapter_parse_result['scraped_timestamp'] = chapter_scrape_timestamp
 
