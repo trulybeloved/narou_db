@@ -199,7 +199,7 @@ if __name__ == "__main__":
     CHAPTER_TITLE_SELECTOR = '.p-novel__title'
     CHAPTER_TEXT_SELECTOR = '.p-novel__body'
 
-    with open(os.path.join('C:\\Users\\prav9\\OneDrive\\Desktop\\Coding\\Projects\\narou_db\\datastores\\index_scrape_results.json'), 'r', encoding='utf-8') as index_scrape_file:
+    with open('datastores/index_scrape_results.json', 'r', encoding='utf-8') as index_scrape_file:
         index_scrape_results = json.loads(index_scrape_file.read())
 
     index_entries = []
