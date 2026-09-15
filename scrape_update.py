@@ -4,13 +4,12 @@ import os
 
 from loguru import logger
 from dotenv import load_dotenv
-from discord_webhook import DiscordWebhook
 
 from custom_modules.utilities import get_current_unix_timestamp, to_filename_friendly, list_files, sleep_with_progress
 from custom_modules.narou_parser import parse_narou_index_html, parse_narou_chapter_html
 from custom_modules.requester import get_index_from_d1_db_api, post_to_index_on_d1_db_api, post_chapter_to_d1_db_api
 from custom_modules.webscraper import ScrapeInstruction, async_scrape_url_list
-from custom_modules.discord_integration import send_discord_message, DISCORD_WEBHOOK_URL
+from custom_modules.discord_integration import create_discord_webhook, send_discord_message
 
 NAROU_INDEX_SELECTOR = '.p-eplist'
 INDEX_ENTRY_SELECTOR = '.p-eplist__sublist'
@@ -24,13 +23,15 @@ async def main():
     load_dotenv()
 
     # send_discord_message('NarouDB autorun has been initiated', ping=False)
-    discord_status_webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=f"Autorun loop started: <t:{get_current_unix_timestamp()}>")
+    discord_status_webhook = create_discord_webhook(
+        f"Autorun loop started: <t:{get_current_unix_timestamp()}>"
+    )
 
-    try:
-        discord_status_webhook.execute()
-    except Exception as e:
-        logger.error(f'Error during discord webhook call: {e}')
-        pass
+    if discord_status_webhook is not None:
+        try:
+            discord_status_webhook.execute()
+        except Exception as e:
+            logger.error(f'Error during discord webhook call: {e}')
 
     skip_loop_flag = False
 
@@ -80,7 +81,8 @@ async def main():
         print('\nLocal Index compiled\n')
 
         if not local_index:
-            raise ValueError
+            logger.error('No index entries were parsed; ending this update run.')
+            return
 
         try:
             remote_index = await get_index_from_d1_db_api()
@@ -189,16 +191,21 @@ async def main():
 
         else:
             logger.info('No new/modified entries found')
-            discord_status_webhook.content = f'Last successful autorun loop: <t:{get_current_unix_timestamp()}> (<t:{get_current_unix_timestamp()}:R>)'
+            if discord_status_webhook is not None:
+                discord_status_webhook.content = f'Last successful autorun loop: <t:{get_current_unix_timestamp()}> (<t:{get_current_unix_timestamp()}:R>)'
 
-            try:
-                discord_status_webhook.edit()
-            except Exception as e:
                 try:
-                    discord_status_webhook = DiscordWebhook(url=DISCORD_WEBHOOK_URL, content=f"Autorun loop started: <t:{get_current_unix_timestamp()}>")
-                    discord_status_webhook.execute()
+                    discord_status_webhook.edit()
                 except Exception as e:
-                    pass
+                    logger.error(f'Error updating Discord status webhook: {e}')
+                    discord_status_webhook = create_discord_webhook(
+                        f"Autorun loop started: <t:{get_current_unix_timestamp()}>"
+                    )
+                    if discord_status_webhook is not None:
+                        try:
+                            discord_status_webhook.execute()
+                        except Exception as retry_error:
+                            logger.error(f'Error recreating Discord status webhook: {retry_error}')
                 # send_discord_message(message='Narou Index for Re:ZERO scraped. No new/modified entries found', ping=False)
 
 
