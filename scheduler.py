@@ -1,12 +1,15 @@
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 # Path to the script you want to run
 SCRIPT_PATH = "scrape_update.py"
 
-VENV_PYTHON = os.path.join(os.getcwd(), 'venv', 'Scripts', 'python.exe')
+# Use the interpreter that launched the scheduler (normally .venv), rather
+# than assuming a second, differently named virtual environment exists.
+VENV_PYTHON = sys.executable
 LOCK_FILE = Path(os.path.join( os.getcwd(), "scrape_update.lock") ) # Path to lock file
 
 def run_script():

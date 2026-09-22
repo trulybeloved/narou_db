@@ -116,6 +116,10 @@ sample_text.py
 *.db
 *.db-shm
 *.db-wal
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+scrape_update.lock
 datastores/deepl_tl.db
 datastores/google_tl.db
 datastores/je_text_to_speech.db
