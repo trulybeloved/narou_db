@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 import pytest
 
@@ -20,8 +21,12 @@ class MockService:
         request = Request(self.origin + '/__mock/api/v1/' + action,
                           data=json.dumps(data).encode() if data is not None else None,
                           headers={'Content-Type': 'application/json'})
-        with urlopen(request, timeout=10) as response:
-            return json.load(response)
+        try:
+            with urlopen(request, timeout=10) as response:
+                return json.load(response)
+        except HTTPError as exc:
+            exc.close()
+            raise
 
     def state(self, state):
         return self.api('state', {'state': state})
@@ -83,9 +88,9 @@ def isolated_scraper(tmp_path, mock_service, monkeypatch, artifact_dir):
     config = updater.ScrapeConfig(
         datastore_root=root,
         index_urls=[f'https://ncode.syosetu.com/n2267be/?p={n}' for n in range(1, 4)],
-        transport=TransportConfig(mock_origin=mock_service.origin, navigation_timeout_ms=3000,
+        transport=TransportConfig(mock_origin=mock_service.origin, request_timeout_seconds=3,
                                   max_tries=1, retry_base_seconds=0, jitter=False,
-                                  trace_dir=artifact_dir / 'traces'),
+                                  diagnostics_dir=artifact_dir / 'http'),
         clock=lambda: 1735689600,
     )
     yield config

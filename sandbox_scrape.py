@@ -44,7 +44,7 @@ async def run_sandbox(origin, root, *, pages=3, timestamp=1735689600):
     config = ScrapeConfig(
         datastore_root=root,
         index_urls=[f'https://ncode.syosetu.com/n2267be/?p={n}' for n in range(1, pages + 1)],
-        transport=TransportConfig(mock_origin=origin, navigation_timeout_ms=3000,
+        transport=TransportConfig(mock_origin=origin, request_timeout_seconds=3,
                                   max_tries=2, retry_base_seconds=0, jitter=False),
         clock=lambda: timestamp,
     )

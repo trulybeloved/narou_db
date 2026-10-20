@@ -107,4 +107,14 @@ def narou_scenario():
     good = narou_routes(base)[0]['responses'][0]
     override('delayed', [{**good, "delay_ms": 250}])
     override('fail-then-recover', [{"status": 500, "body": 'Temporary failure'}, good])
+    # The sandbox requests three pages in every state. Represent unused pages
+    # explicitly as valid empty index pages; reserve 404 for HTTP fault scenarios.
+    for state in states.values():
+        pages = max(1, (len(state['chapters']) + state['page_size'] - 1) // state['page_size'])
+        index_class = 'index_box' if state.get('layout') == 'legacy' else 'p-eplist'
+        for page in range(pages + 1, 4):
+            state.setdefault('routes', []).append({
+                'path': '/n2267be/', 'query': {'p': str(page)},
+                'responses': [{'body': f'<div class="{index_class}"></div>'}],
+            })
     return {"schema_version": 1, "id": "narou", "site_pack": "narou", "initial_state": "baseline", "states": states}

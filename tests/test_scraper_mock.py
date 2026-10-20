@@ -7,20 +7,18 @@ from urllib.request import urlopen
 
 from aiohttp import web
 from aiohttp.test_utils import TestServer
-from playwright.async_api import async_playwright
 import pytest
 
 from autoscrape_autoupdate import scrape_and_persist
 from custom_modules.custom_exceptions import WebPageLoadError
 from custom_modules.narou_database import connect, content_hash, get_index, validate
 from custom_modules.webscraper import (
-    TransportConfig, async_get_http_response_status, async_playwright_webscrape,
-    get_http_response_status, sync_playwright_webscrape,
+    TransportConfig, async_get_http_response_status, async_http_webscrape,
+    get_http_response_status, sync_http_webscrape,
 )
 from sandbox_scrape import prepare_sandbox, run_sandbox
 
 CANONICAL = 'https://ncode.syosetu.com/n2267be/'
-pytestmark = pytest.mark.browser
 
 
 def update(config):
@@ -98,20 +96,29 @@ def test_missing_index_and_failed_chapter_contract(isolated_scraper, mock_servic
     assert update(isolated_scraper) == [3]
     mock_service.api('reset', {})
     manifest = mock_service.api('manifest')
-    manifest['states']['baseline']['routes'] = [
+    manifest['states']['baseline']['routes'] += [
         {'path': '/n2267be/2/', 'responses': [{'status': 500, 'body': 'Error'}]}
     ]
     mock_service.api('load', {'manifest': manifest})
     before = isolated_scraper.database.read_bytes()
-    with pytest.raises(RuntimeError, match='provenance'):
+    provenance_before = {
+        path.relative_to(isolated_scraper.datastore_root): path.read_bytes()
+        for folder in ('chapters', 'chapter_raws_html', 'chapter_raws_txt')
+        for path in (isolated_scraper.datastore_root / folder).glob('*')
+    }
+    with pytest.raises(WebPageLoadError, match='HTTP 500'):
         update(isolated_scraper)
     assert isolated_scraper.database.read_bytes() == before
-    # Provenance is currently written before the atomic SQLite transaction.
-    assert (isolated_scraper.datastore_root / 'chapters' / 'https___ncode.syosetu.com_n2267be_2_.json').exists()
+    # The failed batch leaves the earlier successful chapter's provenance intact.
+    assert {
+        path.relative_to(isolated_scraper.datastore_root): path.read_bytes()
+        for folder in ('chapters', 'chapter_raws_html', 'chapter_raws_txt')
+        for path in (isolated_scraper.datastore_root / folder).glob('*')
+    } == provenance_before
 
 
 def test_transport_status_redirects_and_timeouts(mock_service):
-    config = TransportConfig(mock_origin=mock_service.origin, navigation_timeout_ms=1000, max_tries=1)
+    config = TransportConfig(mock_origin=mock_service.origin, request_timeout_seconds=1, max_tries=1)
     assert get_http_response_status(CANONICAL + '?p=1', transport=config) == 200
     assert asyncio.run(async_get_http_response_status(CANONICAL + '?p=1', transport=config)) == 200
     mock_service.state('429')
@@ -120,18 +127,18 @@ def test_transport_status_redirects_and_timeouts(mock_service):
     mock_service.state('fail-then-recover')
     assert get_http_response_status(CANONICAL + '?p=1', transport=config) == 500
     assert get_http_response_status(CANONICAL + '?p=1', transport=config) == 200
-    result = sync_playwright_webscrape(CANONICAL + '?p=1', '.p-eplist', transport=config)
-    assert result['scrape_results']['.p-eplist'] is None  # HTTP 500 does not trigger a browser retry.
-    result = sync_playwright_webscrape(CANONICAL + '?p=1', '.p-eplist', transport=config)
+    with pytest.raises(WebPageLoadError, match='HTTP 500'):
+        sync_http_webscrape(CANONICAL + '?p=1', '.p-eplist', transport=config)
+    result = sync_http_webscrape(CANONICAL + '?p=1', '.p-eplist', transport=config)
     assert result['scrape_results']['.p-eplist']
     mock_service.state('redirect')
-    assert sync_playwright_webscrape(CANONICAL + '?p=1', '.p-eplist', transport=config)['scraped_url'] == CANONICAL + '?p=1'
+    assert sync_http_webscrape(CANONICAL + '?p=1', '.p-eplist', transport=config)['scraped_url'] == CANONICAL + '?p=1'
     mock_service.state('delayed')
     with pytest.raises(WebPageLoadError):
-        asyncio.run(async_playwright_webscrape(CANONICAL + '?p=1', '.p-eplist', transport=replace(config, navigation_timeout_ms=50)))
+        asyncio.run(async_http_webscrape(CANONICAL + '?p=1', '.p-eplist', transport=replace(config, request_timeout_seconds=.05)))
 
 
-def test_off_origin_redirects_and_subresources_are_blocked(mock_service):
+def test_off_origin_redirects_and_subresources_are_blocked(mock_service, monkeypatch):
     async def run():
         hits = []
         async def sink(request):
@@ -147,61 +154,48 @@ def test_off_origin_redirects_and_subresources_are_blocked(mock_service):
                 {'path': '/resources', 'responses': [{'body': f'<h1>Local</h1><img src="{outside}"><script src="{outside}"></script>'}]},
             ]}}}
             mock_service.api('load', {'manifest': manifest})
-            config = TransportConfig(mock_origin=mock_service.origin, navigation_timeout_ms=1000, max_tries=1)
+            monkeypatch.setenv('HTTP_PROXY', outside)
+            monkeypatch.setenv('HTTPS_PROXY', outside)
+            monkeypatch.setenv('NO_PROXY', '')
+            monkeypatch.setenv('no_proxy', '')
+            config = TransportConfig(mock_origin=mock_service.origin, request_timeout_seconds=1, max_tries=1)
             with pytest.raises(ValueError, match='Blocked'):
                 await async_get_http_response_status(CANONICAL, transport=config)
             with pytest.raises(ValueError, match='Blocked'):
                 await asyncio.to_thread(get_http_response_status, CANONICAL, transport=config)
             with pytest.raises(WebPageLoadError):
-                await async_playwright_webscrape(CANONICAL, 'h1', transport=config)
+                await async_http_webscrape(CANONICAL, 'h1', transport=config)
             with pytest.raises(WebPageLoadError):
-                await asyncio.to_thread(sync_playwright_webscrape, CANONICAL, 'h1', transport=config)
-            assert (await async_playwright_webscrape('https://ncode.syosetu.com/resources', 'h1', transport=config))['scrape_results']['h1'] == '<h1>Local</h1>'
+                await asyncio.to_thread(sync_http_webscrape, CANONICAL, 'h1', transport=config)
+            assert (await async_http_webscrape('https://ncode.syosetu.com/resources', 'h1', transport=config))['scrape_results']['h1'] == '<h1>Local</h1>'
             assert not hits
     asyncio.run(run())
 
 
-def test_control_panel(mock_service, artifact_dir):
-    async def run():
-        async with async_playwright() as p:
-            browser = await p.chromium.launch()
-            context = await browser.new_context(accept_downloads=True)
-            await context.tracing.start(screenshots=True, snapshots=True)
-            page = await context.new_page()
-            errors = []
-            page.on('pageerror', lambda error: errors.append(str(error)))
-            try:
-                await page.goto(mock_service.origin + '/__mock/')
-                await page.wait_for_selector('#badge:text("narou / baseline")')
-                await page.select_option('#state', 'revised')
-                await page.click('#apply')
-                await page.wait_for_selector('#badge:text("narou / revised")')
-                assert mock_service.api('status')['state'] == 'revised'
-                urlopen(mock_service.origin + '/n2267be/?p=1').close()
-                await page.click('#refresh')
-                await page.wait_for_selector('#requests tr')
-                assert await page.locator('#requests').inner_text()
-                await page.click('#reset')
-                await page.wait_for_selector('#badge:text("narou / baseline")')
-                await page.fill('#editor', '{"schema_version":99}')
-                await page.click('#apply-json')
-                await page.wait_for_selector('#message.error')
-                assert mock_service.api('status')['state'] == 'baseline'
-                await page.select_option('#scenario', 'generic')
-                await page.click('#load')
-                await page.wait_for_selector('#badge:text("generic / baseline")')
-                async with page.expect_download() as info:
-                    await page.click('#export')
-                download = await info.value
-                await download.save_as(artifact_dir / 'export.json')
-                exported = json.loads((artifact_dir / 'export.json').read_text(encoding='utf-8'))
-                assert exported['id'] == 'generic'
-                await page.screenshot(path=str(artifact_dir / 'panel.png'), full_page=True)
-                assert errors == []
-            finally:
-                await context.tracing.stop(path=str(artifact_dir / 'panel-trace.zip'))
-                await browser.close()
-    asyncio.run(run())
+def test_control_panel_delivery_and_api(mock_service, artifact_dir):
+    from bs4 import BeautifulSoup
+
+    with urlopen(mock_service.origin + '/__mock/') as response:
+        panel = BeautifulSoup(response.read(), 'html.parser')
+    for selector in ('#badge', '#state', '#apply', '#refresh', '#requests', '#reset',
+                     '#editor', '#apply-json', '#scenario', '#load', '#export'):
+        assert panel.select_one(selector) is not None
+    mock_service.state('revised')
+    assert mock_service.api('status')['state'] == 'revised'
+    with urlopen(mock_service.origin + '/n2267be/?p=1'):
+        pass
+    assert mock_service.api('requests')['requests']
+    mock_service.api('reset', {})
+    assert mock_service.api('status')['state'] == 'baseline'
+    with pytest.raises(HTTPError) as error:
+        mock_service.api('load', {'manifest': {'schema_version': 99}})
+    assert error.value.code == 400
+    assert mock_service.api('status')['state'] == 'baseline'
+    mock_service.api('load', {'id': 'generic'})
+    assert mock_service.api('status')['scenario'] == 'generic'
+    exported = mock_service.api('manifest')
+    (artifact_dir / 'export.json').write_text(json.dumps(exported, indent=2), encoding='utf-8')
+    assert exported['id'] == 'generic'
 
 
 def test_sandbox_runner(mock_service, tmp_path):

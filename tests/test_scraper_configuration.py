@@ -1,6 +1,6 @@
 import asyncio
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -49,11 +49,10 @@ def test_transport_preserves_canonical_urls_and_rejects_other_origins():
     assert TransportConfig().map_url(original) == original
 
 
-def test_production_status_probe_retains_user_agent_and_redirect_default():
-    with patch('custom_modules.webscraper.requests.head', return_value=Mock(status_code=200)) as head:
+def test_production_status_probe_uses_async_transport():
+    with patch('custom_modules.webscraper.async_get_http_response_status', AsyncMock(return_value=200)) as head:
         assert get_http_response_status('https://example.org/') == 200
-        assert head.call_args.kwargs['headers']['User-Agent'].startswith('Mozilla/')
-        assert 'allow_redirects' not in head.call_args.kwargs
+        head.assert_awaited_once_with('https://example.org/', transport=None)
 
 
 def test_default_scraper_configuration_is_production():
@@ -61,5 +60,5 @@ def test_default_scraper_configuration_is_production():
     assert config.datastore_root == Path('datastores')
     assert config.database == Path('datastores/narou.sqlite')
     assert config.transport.mock_origin is None
-    assert config.transport.navigation_timeout_ms == 0
+    assert config.transport.request_timeout_seconds == 30
     assert config.index_urls == [f'https://ncode.syosetu.com/n2267be/?p={n}' for n in range(1, 10)]

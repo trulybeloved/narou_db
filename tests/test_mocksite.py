@@ -60,13 +60,16 @@ def test_control_api_rejects_atomically_and_resets(mock_service):
         with pytest.raises(HTTPError) as error:
             mock_service.api(action, data)
         assert error.value.code == 400
+        error.value.close()
         assert mock_service.api('status') == before
     mock_service.state('fail-then-recover')
     target = mock_service.origin + '/n2267be/?p=1'
     with pytest.raises(HTTPError) as error:
         urlopen(target)
     assert error.value.code == 500
-    assert urlopen(target).status == 200
+    error.value.close()
+    with urlopen(target) as response:
+        assert response.status == 200
     assert [r['attempt'] for r in mock_service.api('requests')['requests']] == [1, 2]
     mock_service.api('reset', {})
     assert mock_service.api('status')['state'] == 'baseline'
@@ -75,12 +78,15 @@ def test_control_api_rejects_atomically_and_resets(mock_service):
 
 def test_methods_queries_and_generic_reuse(mock_service):
     mock_service.api('load', {'id': 'generic'})
-    assert b'First item' in urlopen(mock_service.origin + '/items/').read()
+    with urlopen(mock_service.origin + '/items/') as response:
+        assert b'First item' in response.read()
     mock_service.state('changed')
-    assert b'New item' in urlopen(mock_service.origin + '/items/').read()
+    with urlopen(mock_service.origin + '/items/') as response:
+        assert b'New item' in response.read()
     with pytest.raises(HTTPError) as error:
         urlopen(mock_service.origin + '/items/?unexpected=1')
     assert error.value.code == 404
+    error.value.close()
     manifest = mock_service.api('manifest')
     mock_service.api('load', {'manifest': manifest})
     assert mock_service.api('status')['state'] == 'baseline'
@@ -114,6 +120,7 @@ def test_http_faults(mock_service, state, status):
     assert error.value.code == status
     if status == 429:
         assert error.value.headers['Retry-After'] == '1'
+    error.value.close()
 
 
 def test_reference_structure_matches_pack():

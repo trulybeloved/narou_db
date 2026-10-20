@@ -10,7 +10,6 @@ From the repository root, using Python 3.11 or later:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-test.txt -e ./tools/mocksite
-.\.venv\Scripts\python.exe -m playwright install chromium
 .\.venv\Scripts\python.exe -m mocksite serve
 ```
 
@@ -18,8 +17,9 @@ Open **http://127.0.0.1:8765/__mock/**. Select a scenario or state, preview the
 pages, inspect responses and requests, edit scenario JSON, and export it for
 version control. Refresh the request table after running your scraper.
 
-The framework alone needs only `pip install ./tools/mocksite`; Chromium and
-`requirements-test.txt` are for this repository's scraper/tests.
+The framework alone needs only `pip install ./tools/mocksite`;
+`requirements-test.txt` adds this repository's scraper/test dependencies.
+The complete suite runs without browser packages or binaries.
 
 Docker alternative (no local Python required for the service):
 
@@ -62,8 +62,10 @@ Resetting the service resets the website, **not** the sandbox database. Use a
 new empty sandbox directory to restart a full test from scratch.
 
 By default the runner requests three index pages, enough for all bundled states;
-the baseline has two and the pagination-boundary state has three. Extra pages
-return 404 and are skipped by the current scraper. Use `--pages` for custom packs.
+the baseline has two populated pages and the pagination-boundary state has three.
+Unused pages up to page three are explicit HTTP 200 empty-index fixtures.
+Requests beyond the configured routes return 404 and fail the scrape. Use
+`--pages` to match the routes in custom packs.
 
 ## CLI and control API
 
@@ -172,27 +174,36 @@ freezes their output on load. No Narou or SQLite integration is required.
 ## Scraper integration and current limitations
 
 `ScrapeConfig` configures datastore root, index URLs, transport, and clock.
-`scrape_and_persist(config, notify=...)` runs the real browser/parser/comparison/
+`scrape_and_persist(config, notify=...)` runs the real HTTP/parser/comparison/
 SQLite path and returns changed UIDs. Production `update_once()` retains Git
-preconditions, Discord notification, commit/push, and its existing defaults.
+preconditions, Discord notification, and commit/push.
 
-`TransportConfig(mock_origin=..., navigation_timeout_ms=..., max_tries=...,
-retry_base_seconds=..., jitter=False)` redirects canonical Narou requests to the
-mock without changing their reported URLs or filenames. Sync/async browser and
-HEAD helpers use it. Mock browser requests and every HTTP redirect hop are
-restricted to that origin. Historical unmodified checkouts are not adapted.
+`TransportConfig(mock_origin=..., request_timeout_seconds=..., max_tries=...,
+retry_base_seconds=..., jitter=False, diagnostics_dir=...)` redirects canonical
+Narou requests to the mock without changing reported URLs or filenames.
+Sync/async HTTP and HEAD helpers use it. Every redirect hop is checked before
+requesting it; mock requests cannot leave that origin. Environment proxies are
+disabled. Scripts, images, and other subresources are never fetched.
 
-The framework records existing behavior rather than changing it:
+The default request timeout is 30 seconds, with four attempts and a 120-second
+monotonic deadline per URL including redirects and retry waits. Connection
+failures, timeouts, HTTP 429 and 5xx responses retry with exponential backoff
+and jitter. Valid `Retry-After` seconds or dates are honored; a wait beyond the
+remaining budget fails immediately. Other HTTP errors fail without retry.
+HEAD helpers report status codes without retrying and return 0 for transport
+failures. The synchronous helpers must not be called from an active event loop.
 
 | Scenario | Current behavior |
 | --- | --- |
 | Body change without index metadata change | Chapter is not fetched |
 | Removed index listing | Existing database chapter remains |
-| Missing index page/selector, other valid entries | Partial index is accepted |
+| HTTP 200 index missing its selector, other valid entries | Partial index is accepted |
 | Entire index absent or legacy-only DOM | Update fails |
 | Malformed timestamp | Parsing fails |
 | Duplicate index UID | Not explicitly rejected |
-| HTTP 429/500 with successful navigation | No automatic HTTP-status retry; selector extraction still runs |
+| HTTP 429/5xx | Retried within the configured attempts/deadline, then fails |
+| Other HTTP errors, including 404 | Fails immediately |
+| Failed chapter HTTP batch | No chapter provenance or database changes |
 | Failed chapter parsing | SQLite stays unchanged; earlier provenance writes can remain |
 
 Website states are independent of expected scraper results. Future adapters can
@@ -202,17 +213,21 @@ assert improved behavior against the same fixtures.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m pytest -q -m "not browser"
 ```
 
 The suite starts a fresh mock process on a dynamic port for each integration
-test, using temporary databases and synthetic chapters. It includes the existing
-database/Git tests, framework contract tests, real Chromium lifecycle tests,
-egress blocking, and UI controls/export. Browser tests require Chromium and
-permission to launch subprocesses.
+test, using temporary databases and synthetic chapters. It includes database/Git
+checks, framework contracts, HTTP scraper lifecycle, retry/deadline and egress
+checks, and panel delivery plus control API/export checks. JavaScript UI
+interactions are not exercised by these HTTP tests.
 
-Logs, selected state, manifest, requests, browser traces, UI screenshot, and
-exported JSON are saved under ignored `outputs/mock-tests/` (override with
-`NAROU_TEST_ARTIFACTS`). Open traces with `python -m playwright show-trace path.zip`.
-GitHub Actions runs the suite and retains diagnostics on failure, plus a separate
-Docker build/startup smoke test. CI does not need the production SQLite LFS object.
+Logs, selected state, manifest, requests, and exported JSON are saved under
+ignored `outputs/mock-tests/` (override with `NAROU_TEST_ARTIFACTS`). Scraper
+fixtures also save HTTP diagnostics: per-request JSON records contain URL,
+method, attempt, redirect hop, status, duration, error, and the name of an HTML
+response file when available. Pass `diagnostics_dir` to capture these outside
+tests. Raw response bytes retain their original encoding.
+
+GitHub Actions runs the complete suite and retains diagnostics on failure, plus
+a separate Docker build/startup smoke test. CI does not need the production
+SQLite LFS object.

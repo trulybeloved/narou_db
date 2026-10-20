@@ -1,57 +1,70 @@
-"""Browser scraping with an optional, isolated mock transport."""
+"""HTTP-only HTML scraping with bounded retries and an isolated mock transport."""
 
 import asyncio
 from dataclasses import dataclass
+from datetime import timezone
+from email.utils import parsedate_to_datetime
+import json
+import logging
+import math
+from pathlib import Path
 import random
 import time
-from pathlib import Path
-from uuid import uuid4
 from urllib.parse import urljoin, urlsplit, urlunsplit
+from uuid import uuid4
 
 import aiohttp
-from playwright.sync_api import sync_playwright
-from playwright.async_api import async_playwright, Browser
-import requests
+from bs4 import BeautifulSoup
 
 from custom_modules.custom_exceptions import WebPageLoadError
 
-STATUS_HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+STATUS_HEADERS = {'User-Agent': 'NarouDB/1.0'}
+REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+MAX_REDIRECTS = 10
 
 
 @dataclass(frozen=True)
 class TransportConfig:
     mock_origin: str | None = None
-    navigation_timeout_ms: int = 0
+    request_timeout_seconds: float = 30
     max_tries: int = 4
     retry_base_seconds: float = 1
     retry_max_seconds: float = 120
     jitter: bool = True
-    trace_dir: Path | None = None
+    diagnostics_dir: Path | None = None
 
     def __post_init__(self):
-        if self.max_tries < 1 or self.navigation_timeout_ms < 0 or self.retry_base_seconds < 0 or self.retry_max_seconds < 0:
+        if (not isinstance(self.max_tries, int) or isinstance(self.max_tries, bool) or self.max_tries < 1
+                or not math.isfinite(self.request_timeout_seconds) or self.request_timeout_seconds <= 0
+                or not math.isfinite(self.retry_max_seconds) or self.retry_max_seconds <= 0
+                or not math.isfinite(self.retry_base_seconds) or self.retry_base_seconds < 0):
             raise ValueError('Invalid timeout or retry configuration')
         if self.mock_origin:
             parsed = urlsplit(self.mock_origin)
-            if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password or parsed.path not in ('', '/') or parsed.query or parsed.fragment:
+            if (parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username
+                    or parsed.password or parsed.path not in ('', '/') or parsed.query or parsed.fragment):
                 raise ValueError('mock_origin must be an HTTP origin without a path')
+            parsed.port  # Reject malformed ports before making requests.
 
     def allows(self, url):
+        parsed = urlsplit(url)
+        if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password:
+            return False
         if not self.mock_origin:
             return True
-        parsed, allowed = urlsplit(url), urlsplit(self.mock_origin)
-        return (parsed.scheme, parsed.hostname, parsed.port) == (allowed.scheme, allowed.hostname, allowed.port) and not parsed.username and not parsed.password
+        allowed = urlsplit(self.mock_origin)
+        def origin(parts):
+            return parts.scheme, parts.hostname, parts.port or (443 if parts.scheme == 'https' else 80)
+        return origin(parsed) == origin(allowed)
 
     def map_url(self, url):
-        if not self.mock_origin:
-            return url
         parsed = urlsplit(url)
-        if (parsed.scheme, parsed.netloc) == ('https', 'ncode.syosetu.com'):
+        if self.mock_origin and (parsed.scheme, parsed.netloc) == ('https', 'ncode.syosetu.com'):
             target = urlsplit(self.mock_origin)
             return urlunsplit((target.scheme, target.netloc, parsed.path, parsed.query, parsed.fragment))
         if self.allows(url):
             return url
-        raise ValueError(f'Blocked request outside the mock origin: {url}')
+        raise ValueError(f'Blocked request outside the allowed HTTP origin: {url}')
 
     def delay(self, attempt):
         delay = self.retry_base_seconds * 2 ** attempt
@@ -64,165 +77,166 @@ class ScrapeInstruction:
         self.query_selectors = query_selectors
 
 
-def get_http_response_status(url: str, *, transport: TransportConfig | None = None) -> int:
-    config = transport or TransportConfig()
-    target = config.map_url(url)
-    try:
-        if not config.mock_origin:
-            return requests.head(target, headers=STATUS_HEADERS,
-                                 timeout=config.navigation_timeout_ms / 1000 or None).status_code
-        with requests.Session() as session:
-            if config.mock_origin:
-                session.trust_env = False
-            for _ in range(10):
-                if not config.allows(target):
-                    raise ValueError('Blocked redirect outside the mock origin')
-                response = session.head(target, headers=STATUS_HEADERS, allow_redirects=False,
-                                        timeout=config.navigation_timeout_ms / 1000 or None)
-                if response.status_code in (301, 302, 303, 307, 308) and 'Location' in response.headers:
-                    target = urljoin(target, response.headers['Location'])
-                else:
-                    return response.status_code
-            return 0
-    except requests.RequestException:
+class _HTTPError(WebPageLoadError):
+    def __init__(self, status, retry_after):
+        super().__init__(f'HTTP {status}')
+        self.retryable = status == 429 or 500 <= status <= 599
+        self.retry_after = retry_after
+
+
+class _RedirectLimitError(WebPageLoadError):
+    pass
+
+
+def _retry_after(value):
+    if value is None:
         return 0
+    try:
+        seconds = float(value)
+    except ValueError:
+        try:
+            date = parsedate_to_datetime(value)
+            if date.tzinfo is None:
+                date = date.replace(tzinfo=timezone.utc)
+            seconds = date.timestamp() - time.time()
+        except (TypeError, ValueError, OverflowError):
+            return 0
+    return max(0, seconds) if math.isfinite(seconds) else 0
+
+
+def _diagnostic(config, metadata, body):
+    if config.diagnostics_dir is None:
+        return
+    try:
+        root = Path(config.diagnostics_dir)
+        root.mkdir(parents=True, exist_ok=True)
+        name = uuid4().hex
+        if body is not None:
+            (root / f'{name}.html').write_bytes(body)
+            metadata['response_file'] = f'{name}.html'
+        (root / f'{name}.json').write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding='utf-8')
+    except OSError:
+        logging.getLogger(__name__).warning('Could not write HTTP diagnostics', exc_info=True)
+
+
+def _session(config):
+    return aiohttp.ClientSession(
+        headers=STATUS_HEADERS, trust_env=False,
+        timeout=aiohttp.ClientTimeout(total=config.request_timeout_seconds),
+        connector=aiohttp.TCPConnector(limit=10),
+    )
+
+
+async def _request(session, method, target, config, *, original_url, attempt):
+    """Follow redirects manually so mock egress is checked before every hop."""
+    for hop in range(MAX_REDIRECTS + 1):
+        if not config.allows(target):
+            raise ValueError(f'Blocked redirect outside the allowed HTTP origin: {target}')
+        started = time.monotonic()
+        body = None
+        metadata = {'url': target, 'original_url': original_url, 'method': method,
+                    'attempt': attempt, 'redirect_hop': hop, 'status': None, 'error': None}
+        try:
+            async with session.request(method, target, allow_redirects=False) as response:
+                metadata['status'] = response.status
+                # HEAD does not consume the body; GET diagnostics retain even error responses.
+                body = await response.read() if method == 'GET' else None
+                if response.status in REDIRECT_STATUSES and 'Location' in response.headers:
+                    if hop == MAX_REDIRECTS:
+                        raise _RedirectLimitError(f'Too many redirects (limit {MAX_REDIRECTS})')
+                    target = urljoin(str(response.url), response.headers['Location'])
+                    continue
+                if response.status >= 400:
+                    metadata['error'] = f'HTTP {response.status}'
+                return response.status, body, response.charset, response.headers.get('Retry-After')
+        except BaseException as exc:
+            metadata['error'] = f'{type(exc).__name__}: {exc}'
+            raise
+        finally:
+            metadata['duration_seconds'] = time.monotonic() - started
+            _diagnostic(config, metadata, body)
+
+
+def _run_sync(async_function, *args, **kwargs):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(async_function(*args, **kwargs))
+    raise RuntimeError(f'Cannot use a synchronous HTTP helper inside an active event loop; use {async_function.__name__}() instead.')
+
+
+def get_http_response_status(url: str, *, transport: TransportConfig | None = None) -> int:
+    return _run_sync(async_get_http_response_status, url, transport=transport)
 
 
 async def async_get_http_response_status(url: str, *, transport: TransportConfig | None = None) -> int:
     config = transport or TransportConfig()
     target = config.map_url(url)
     try:
-        timeout = {'timeout': aiohttp.ClientTimeout(total=config.navigation_timeout_ms / 1000)} if config.navigation_timeout_ms else {}
-        async with aiohttp.ClientSession(headers=STATUS_HEADERS, **timeout) as session:
-            if not config.mock_origin:
-                async with session.head(target) as response:
-                    return response.status
-            for _ in range(10):
-                if not config.allows(target):
-                    raise ValueError('Blocked redirect outside the mock origin')
-                async with session.head(target, allow_redirects=False) as response:
-                    if response.status in (301, 302, 303, 307, 308) and 'Location' in response.headers:
-                        target = urljoin(target, response.headers['Location'])
-                    else:
-                        return response.status
-            return 0
-    except (aiohttp.ClientError, asyncio.TimeoutError):
+        async with _session(config) as session:
+            async with asyncio.timeout(min(config.request_timeout_seconds, config.retry_max_seconds)):
+                status, _, _, _ = await _request(session, 'HEAD', target, config, original_url=url, attempt=1)
+                return status
+    except (aiohttp.ClientError, TimeoutError, _RedirectLimitError):
         return 0
 
 
-async def async_playwright_webscrape(url: str, query_selectors: str | list,
-                                    semaphore: asyncio.Semaphore | None = None,
-                                    browser: Browser = None, *, transport: TransportConfig | None = None) -> dict:
-    config = transport or TransportConfig()
-    target = config.map_url(url)
+async def _scrape(session, url, query_selectors, config):
     selectors = [query_selectors] if isinstance(query_selectors, str) else query_selectors
-    started = time.monotonic()
-    async with semaphore or asyncio.Semaphore(10):
+    deadline = time.monotonic() + config.retry_max_seconds
+    try:
+        target = config.map_url(url)
         for attempt in range(config.max_tries):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError('Retry deadline exhausted')
             try:
-                async with async_playwright() as playwright:
-                    owned = browser is None
-                    active = browser or await playwright.chromium.launch(headless=True, timeout=config.navigation_timeout_ms)
-                    context = await active.new_context(service_workers='block' if config.mock_origin else 'allow')
-                    try:
-                        if config.trace_dir:
-                            await context.tracing.start(screenshots=True, snapshots=True, sources=True)
-                        if config.mock_origin:
-                            async def guard(route):
-                                target_url = route.request.url
-                                # Browser routing alone does not intercept every hop
-                                # of a redirect chain. Resolve hops without following
-                                # redirects automatically, checking each destination.
-                                for _ in range(10):
-                                    if not config.allows(target_url):
-                                        await route.abort()
-                                        return
-                                    response = await route.fetch(url=target_url, max_redirects=0,
-                                                                 timeout=config.navigation_timeout_ms)
-                                    if response.status in (301, 302, 303, 307, 308) and 'location' in response.headers:
-                                        target_url = urljoin(target_url, response.headers['location'])
-                                        await response.dispose()
-                                    else:
-                                        await route.fulfill(response=response)
-                                        await response.dispose()
-                                        return
-                                await route.abort()
-                            await context.route('**/*', guard)
-                        page = await context.new_page()
-                        await page.goto(target, timeout=config.navigation_timeout_ms, wait_until='domcontentloaded')
-                        results = {}
-                        for selector in selectors:
-                            element = await page.query_selector(selector)
-                            results[selector] = await element.evaluate('e => e.outerHTML') if element else None
-                        return {'scraped_url': url, 'scrape_results': results}
-                    finally:
-                        try:
-                            if config.trace_dir:
-                                Path(config.trace_dir).mkdir(parents=True, exist_ok=True)
-                                await context.tracing.stop(path=str(Path(config.trace_dir) / f'{uuid4().hex}.zip'))
-                        finally:
-                            await context.close()
-                            if owned:
-                                await active.close()
-            except Exception as exc:
-                elapsed = time.monotonic() - started
-                if attempt + 1 >= config.max_tries or elapsed >= config.retry_max_seconds:
-                    raise WebPageLoadError(f'Could not scrape {url}: {exc}') from exc
-                await asyncio.sleep(min(config.delay(attempt), max(0, config.retry_max_seconds - elapsed)))
+                async with asyncio.timeout(min(config.request_timeout_seconds, remaining)):
+                    status, body, charset, retry_after = await _request(
+                        session, 'GET', target, config, original_url=url, attempt=attempt + 1)
+                if not 200 <= status < 300:
+                    raise _HTTPError(status, _retry_after(retry_after))
+                soup = BeautifulSoup(body, 'html.parser', from_encoding=charset)
+                results = {}
+                for selector in selectors:
+                    element = soup.select_one(selector)
+                    results[selector] = str(element) if element is not None else None
+                return {'scraped_url': url, 'scrape_results': results}
+            except (aiohttp.ClientError, TimeoutError, _HTTPError) as exc:
+                if isinstance(exc, _HTTPError) and not exc.retryable:
+                    raise
+                if attempt + 1 >= config.max_tries:
+                    raise
+                delay = max(config.delay(attempt), exc.retry_after if isinstance(exc, _HTTPError) else 0)
+                if delay >= deadline - time.monotonic():
+                    raise TimeoutError(f'Retry deadline exhausted after {exc}') from exc
+                await asyncio.sleep(delay)
+    except (aiohttp.ClientError, TimeoutError, ValueError, WebPageLoadError) as exc:
+        raise WebPageLoadError(f'Could not scrape {url}: {type(exc).__name__}: {exc}') from exc
 
 
-def sync_playwright_webscrape(url: str, query_selectors: str | list, *, transport: TransportConfig | None = None) -> dict:
+async def async_http_webscrape(url: str, query_selectors: str | list, *, transport: TransportConfig | None = None) -> dict:
     config = transport or TransportConfig()
-    target = config.map_url(url)
-    selectors = [query_selectors] if isinstance(query_selectors, str) else query_selectors
-    started = time.monotonic()
-    for attempt in range(config.max_tries):
-        try:
-            with sync_playwright() as playwright:
-                browser = playwright.chromium.launch(headless=True, timeout=config.navigation_timeout_ms)
-                try:
-                    context = browser.new_context(service_workers='block' if config.mock_origin else 'allow')
-                    if config.mock_origin:
-                        def guard(route):
-                            target_url = route.request.url
-                            for _ in range(10):
-                                if not config.allows(target_url):
-                                    route.abort()
-                                    return
-                                response = route.fetch(url=target_url, max_redirects=0, timeout=config.navigation_timeout_ms)
-                                if response.status in (301, 302, 303, 307, 308) and 'location' in response.headers:
-                                    target_url = urljoin(target_url, response.headers['location'])
-                                    response.dispose()
-                                else:
-                                    route.fulfill(response=response)
-                                    response.dispose()
-                                    return
-                            route.abort()
-                        context.route('**/*', guard)
-                    page = context.new_page()
-                    page.goto(target, timeout=config.navigation_timeout_ms, wait_until='domcontentloaded')
-                    results = {}
-                    for selector in selectors:
-                        element = page.query_selector(selector)
-                        results[selector] = element.evaluate('e => e.outerHTML') if element else None
-                    return {'scraped_url': url, 'scrape_results': results}
-                finally:
-                    browser.close()
-        except Exception as exc:
-            elapsed = time.monotonic() - started
-            if attempt + 1 >= config.max_tries or elapsed >= config.retry_max_seconds:
-                raise WebPageLoadError(f'Could not scrape {url}: {exc}') from exc
-            time.sleep(min(config.delay(attempt), max(0, config.retry_max_seconds - elapsed)))
+    async with _session(config) as session:
+        return await _scrape(session, url, query_selectors, config)
+
+
+def sync_http_webscrape(url: str, query_selectors: str | list, *, transport: TransportConfig | None = None) -> dict:
+    return _run_sync(async_http_webscrape, url, query_selectors, transport=transport)
 
 
 async def async_scrape_url_list(scrape_instructions_list: list[ScrapeInstruction], *, transport: TransportConfig | None = None):
+    config = transport or TransportConfig()
     semaphore = asyncio.Semaphore(10)
-    tasks = [asyncio.create_task(async_playwright_webscrape(instruction.url, instruction.query_selectors, semaphore, transport=transport))
-             for instruction in scrape_instructions_list]
-    try:
-        return await asyncio.gather(*tasks)
-    finally:
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+    async with _session(config) as session:
+        async def scrape(instruction):
+            async with semaphore:
+                return await _scrape(session, instruction.url, instruction.query_selectors, config)
+        tasks = [asyncio.create_task(scrape(instruction)) for instruction in scrape_instructions_list]
+        try:
+            return await asyncio.gather(*tasks)
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)

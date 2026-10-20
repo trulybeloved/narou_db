@@ -36,6 +36,20 @@ Only one writer may run. A scrape, validation, Git, or push error stops the
 writer and leaves changes uncommitted for investigation. No Cloudflare or D1
 configuration is used.
 
+## HTTP scraping
+
+The SSR pages are fetched directly with `aiohttp`; no browser installation or
+rendering is needed. BeautifulSoup extracts the requested CSS selectors. Batch
+requests share a connection pool and allow at most ten concurrent operations.
+Each URL has a 30-second request timeout, up to four attempts, and a 120-second
+overall retry deadline. HTTP 429 and 5xx responses and transport failures are
+retried with exponential backoff; other HTTP errors fail immediately.
+
+`TransportConfig(request_timeout_seconds=..., max_tries=...,
+retry_max_seconds=..., diagnostics_dir=...)` overrides these settings.
+`async_http_webscrape()` and `sync_http_webscrape()` replace the former
+browser-specific helpers. Use the async API inside an active event loop.
+
 ## Repeatable scraper tests
 
 The [mock website framework](tools/mocksite/README.md) provides a local Narou
@@ -44,7 +58,6 @@ runs. It includes a generic site example for reuse in other projects.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-test.txt -e ./tools/mocksite
-.\.venv\Scripts\python.exe -m playwright install chromium
 .\.venv\Scripts\python.exe -m mocksite serve
 ```
 
