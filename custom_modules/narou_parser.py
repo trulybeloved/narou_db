@@ -121,7 +121,7 @@ def parse_narou_chapter_html(scraper_result: dict, chapter_title_selector: str, 
     parse_result['narou_link'] = scraper_result['scraped_url']
     parse_result['chapter_uid'] = str(scraper_result['scraped_url']).replace(
         'https://ncode.syosetu.com/n2267be/', '').replace('/', '')
-    chapter_title = BeautifulSoup(scraper_result['scrape_results'][chapter_title_selector], 'html.parser').text
+    chapter_title = BeautifulSoup(scraper_result['scrape_results'][chapter_title_selector], 'html.parser').get_text().strip()
     parse_result['chapter_title'] = chapter_title
     chapter_title_parse_results = parse_chapter_title(chapter_title)
     parse_result['chapter_id'] = generate_chapter_id(chapter_title_parse_results)
@@ -146,7 +146,6 @@ def parse_narou_index_html(index_html, index_entry_class_name: str, entry_publis
     # print(index_soup.find('div').get(key='class'))
 
     index_entries = index_soup.find_all('div', class_=index_entry_class_name.replace('.', ''))
-    print(f'Index Entries: {len(index_entries)}')
     parse_results = []
 
     for index_entry in index_entries:

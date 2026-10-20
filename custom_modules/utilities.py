@@ -32,10 +32,8 @@ def convert_to_unix_timestamp(timestamp_str: str, offset_hours: float) -> int:
     return unix_timestamp
 
 def get_current_unix_timestamp(mode: int = 1) -> int:
-    current_time = datetime.utcnow()
-    if mode == 1:
-        current_time = datetime.fromtimestamp(timestamp=time.time())
-    return int(current_time.timestamp())
+    # Epoch seconds are timezone-independent; retain the legacy mode argument.
+    return int(time.time())
 
 def to_filename_friendly(string):
     """

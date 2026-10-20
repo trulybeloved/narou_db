@@ -1,0 +1,20 @@
+[Unit]
+Description=Narou database updater
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=narou
+WorkingDirectory=/srv/narou_db
+ExecStart=/srv/narou_db/.venv/bin/python /srv/narou_db/autoscrape_autoupdate.py
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartPreventExitStatus=1 2 3
+RestartSec=60
+TimeoutStopSec=50
+KillMode=mixed
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

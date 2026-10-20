@@ -27,14 +27,21 @@ source record is unreadable.
 
 ## Scheduled writer
 
-Run `autoscrape_autoupdate.py` from a clean checkout on `master`. It fetches
-and requires an exact `origin/master` match before every update. It writes
-changed provenance files and a temporary SQLite copy, validates the database,
-atomically promotes it, then commits and pushes the changed datastore files.
+Run `python autoscrape_autoupdate.py` using Python 3.11+ in a dedicated, clean
+checkout on `master`. The service discovers index pagination, stages and
+validates complete updates, then journals file promotion and publishes an
+exact-path Git commit. OS locks enforce one writer, including one-shot runs.
+Unchanged polls leave tracked files untouched.
 
-Only one writer may run. A scrape, validation, Git, or push error stops the
-writer and leaves changes uncommitted for investigation. No Cloudflare or D1
-configuration is used.
+Successful cycles wait 15 minutes; temporary failures retry indefinitely with
+bounded exponential jitter. Interrupted updater-owned publications resume
+before the next scrape. Unrelated changes, divergence, corruption, and local
+storage/configuration failures stop the writer for investigation.
+
+HTTP health checks listen on `127.0.0.1:8766/livez` and `/readyz`. Git commands,
+HTTP requests, worker lifetime, notifications, and shutdown have deadlines.
+See [updater operations](docs/updater-operations.md) for configuration, Linux
+and Windows supervision, health semantics, and recovery instructions.
 
 ## HTTP scraping
 

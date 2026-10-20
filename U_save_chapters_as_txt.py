@@ -9,7 +9,6 @@ def process_chapter_for_save(chapter) -> tuple:
 
     narou_uid = narou_parser.get_narou_uid_from_url(chapter['scraped_url'])
     narou_uid = str(narou_uid).zfill(5)
-    print(narou_uid)
 
     chapter_title_soup = BeautifulSoup(chapter['scrape_results']['.p-novel__title'], 'html.parser')
     chapter_soup = BeautifulSoup(chapter['scrape_results']['.p-novel__body'], 'html.parser')
@@ -24,7 +23,6 @@ def process_chapter_for_save(chapter) -> tuple:
     chapter_text = f'{chapter_title_soup.text}\n{chapter_soup}'
 
     chapter_title_parse_results = narou_parser.parse_chapter_title(chapter_title_soup.text)
-    print(chapter_title_parse_results)
 
     return chapter_text, chapter_html, narou_uid
 

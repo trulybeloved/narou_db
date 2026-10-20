@@ -82,7 +82,7 @@ def isolated_scraper(tmp_path, mock_service, monkeypatch, artifact_dir):
     before = hashlib.sha256(production.read_bytes()).digest() if production.exists() else None
     def forbidden(*args, **kwargs):
         pytest.fail('Production external effect was called')
-    for name in ('require_clean_current_master', 'commit_datastores_and_push', 'send_discord_message'):
+    for name in ('require_clean_current_master', 'update_once', 'runtime_directory'):
         monkeypatch.setattr(updater, name, forbidden)
     root = prepare_sandbox(tmp_path / 'sandbox')
     config = updater.ScrapeConfig(

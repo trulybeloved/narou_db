@@ -68,8 +68,8 @@ def test_repeatable_lifecycle(isolated_scraper, mock_service):
 
 
 @pytest.mark.parametrize('state,expected', [
-    ('body-only', []), ('removed-listing', []), ('title-change', [2]),
-    ('pagination-boundary', [4, 5]), ('duplicate-entry', []), ('incomplete-index', []),
+    ('body-only', []), ('title-change', [2]),
+    ('pagination-boundary', [4, 5]), ('duplicate-entry', []),
 ])
 def test_current_change_detection_contract(isolated_scraper, mock_service, state, expected):
     assert update(isolated_scraper) == [1, 2, 3]
@@ -81,8 +81,10 @@ def test_current_change_detection_contract(isolated_scraper, mock_service, state
         assert after == before
 
 
-@pytest.mark.parametrize('state', ['malformed-timestamp', 'legacy'])
+@pytest.mark.parametrize('state', ['malformed-timestamp', 'legacy', 'removed-listing', 'incomplete-index'])
 def test_invalid_index_preserves_database(isolated_scraper, mock_service, state):
+    if state == 'removed-listing':
+        update(isolated_scraper)
     before = isolated_scraper.database.read_bytes()
     mock_service.state(state)
     with pytest.raises((RuntimeError, ValueError)):
@@ -92,8 +94,8 @@ def test_invalid_index_preserves_database(isolated_scraper, mock_service, state)
 
 def test_missing_index_and_failed_chapter_contract(isolated_scraper, mock_service):
     mock_service.state('missing-selector')
-    # Other index pages are still accepted by today's scraper.
-    assert update(isolated_scraper) == [3]
+    with pytest.raises(RuntimeError, match='Missing index selector'):
+        update(isolated_scraper)
     mock_service.api('reset', {})
     manifest = mock_service.api('manifest')
     manifest['states']['baseline']['routes'] += [

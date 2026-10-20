@@ -32,9 +32,15 @@ class TransportConfig:
     retry_max_seconds: float = 120
     jitter: bool = True
     diagnostics_dir: Path | None = None
+    max_response_bytes: int = 8 * 1024 * 1024
+    diagnostics_max_records: int = 100
 
     def __post_init__(self):
         if (not isinstance(self.max_tries, int) or isinstance(self.max_tries, bool) or self.max_tries < 1
+                or not isinstance(self.max_response_bytes, int) or isinstance(self.max_response_bytes, bool)
+                or self.max_response_bytes < 1
+                or not isinstance(self.diagnostics_max_records, int) or isinstance(self.diagnostics_max_records, bool)
+                or self.diagnostics_max_records < 1
                 or not math.isfinite(self.request_timeout_seconds) or self.request_timeout_seconds <= 0
                 or not math.isfinite(self.retry_max_seconds) or self.retry_max_seconds <= 0
                 or not math.isfinite(self.retry_base_seconds) or self.retry_base_seconds < 0):
@@ -115,6 +121,10 @@ def _diagnostic(config, metadata, body):
             (root / f'{name}.html').write_bytes(body)
             metadata['response_file'] = f'{name}.html'
         (root / f'{name}.json').write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding='utf-8')
+        records = sorted(root.glob('*.json'), key=lambda path: path.stat().st_mtime, reverse=True)
+        for old in records[config.diagnostics_max_records:]:
+            old.with_suffix('.html').unlink(missing_ok=True)
+            old.unlink(missing_ok=True)
     except OSError:
         logging.getLogger(__name__).warning('Could not write HTTP diagnostics', exc_info=True)
 
@@ -140,7 +150,14 @@ async def _request(session, method, target, config, *, original_url, attempt):
             async with session.request(method, target, allow_redirects=False) as response:
                 metadata['status'] = response.status
                 # HEAD does not consume the body; GET diagnostics retain even error responses.
-                body = await response.read() if method == 'GET' else None
+                if method == 'GET':
+                    chunks, size = [], 0
+                    async for chunk in response.content.iter_chunked(64 * 1024):
+                        size += len(chunk)
+                        if size > config.max_response_bytes:
+                            raise WebPageLoadError('Response exceeds the configured size limit')
+                        chunks.append(chunk)
+                    body = b''.join(chunks)
                 if response.status in REDIRECT_STATUSES and 'Location' in response.headers:
                     if hop == MAX_REDIRECTS:
                         raise _RedirectLimitError(f'Too many redirects (limit {MAX_REDIRECTS})')
