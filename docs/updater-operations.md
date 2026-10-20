@@ -62,6 +62,36 @@ delivery failures do not affect updates. Notifications are best effort and
 may be lost or repeated across process crashes. HTTP readiness is the
 authoritative monitoring signal.
 
+Notifications use Discord embeds with a state-specific title and color, UTC
+timestamp, status, next step, and relevant chapter counts, failure counts,
+error categories, and phases. Configured user mentions accompany the embed.
+Publication embeds include a **View commit** link to the exact commit after
+the publisher verifies it is present on the remote, including recovered
+publications. The URL is derived from GitHub `origin` push URLs in HTTPS or SSH
+form; credentials in the remote URL are omitted. Other hosts and local remotes
+omit the link. No additional API token or configuration is required. The
+repository must be public for recipients to open the link without GitHub access;
+the updater does not check repository visibility.
+
+To send labeled samples of each notification state to the configured Discord
+webhook, run:
+
+```sh
+.venv/bin/python send_discord_samples.py
+```
+
+The script reads the repository `.env`, with environment variables taking
+precedence, and uses `DISCORD_WEBHOOK_URL` and optional `PING_USER_ID` just like
+the service. It sends publication, retryable failure, continuing failure,
+recovery, and fatal failure samples, one second apart. Continuing failures use
+a distinct reminder embed; the service sends it at most hourly.
+Use `--state recovery` to select a state (repeat `--state` for several),
+`--no-ping` to omit mentions, or `--dry-run` to preview the embed payloads without
+sending. Sending exits with code 1 if configuration or delivery fails.
+The publication sample links to the checkout's current commit; it does not
+create or push a commit. That sample link is only reachable if the current
+commit already exists on GitHub.
+
 ## Health and shutdown
 
 ```sh
@@ -82,7 +112,8 @@ failure count, changed-chapter count, pending publication, and error category.
 They omit exception messages, credentials, paths, and response bodies. Probes
 read cached supervisor state. Binding failure prevents any worker from starting.
 The default listener is local; configure a different address only when the
-deployment requires it.
+deployment requires it. Startup logs include the full URLs for both health
+endpoints after the listener starts, using its bound address and port.
 
 Ctrl+C, Linux SIGTERM, and Windows console interruption stop scheduling and
 wake sleep immediately. A running worker receives up to the shutdown grace
@@ -156,9 +187,10 @@ An interrupted Git process can leave `index.lock`; inspect for live Git
 processes before manually removing it. Unowned ahead commits, changed journal
 files, and modified candidate files intentionally require operator intervention.
 
-Structured stderr logs and separate service/worker JSONL files contain phases,
-transaction IDs, durations, counts, and tracebacks without captured local
-variables. Each file rotates at 10 MB with five retained rotations. HTTP
+Terminal stderr logs use readable timestamps, levels, messages, and context
+such as phases, transaction IDs, durations, and counts. Separate service/worker
+JSONL files retain structured records. Both include tracebacks without captured
+local variables. Each file rotates at 10 MB with five retained rotations. HTTP
 diagnostics retain at most 100 response/metadata pairs and are pruned after
 seven days between cycles. Responses are capped at 8 MiB after decompression.
 Logs and diagnostics can contain scraped content and remote error messages;

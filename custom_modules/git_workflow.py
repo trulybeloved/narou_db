@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess
 import os
 from pathlib import Path
+import re
+from urllib.parse import urlsplit
 
 from custom_modules.updater_safety import FatalUpdaterError, RetryableUpdaterError, kill_process_tree
 
@@ -52,6 +54,32 @@ def _git(repository: Path, *args: str, strip: bool = True) -> str:
 def runtime_directory(repository: Path) -> Path:
     directory = Path(_git(repository, 'rev-parse', '--git-common-dir'))
     return (repository / directory).resolve() / 'narou-updater'
+
+
+def github_commit_url(repository: Path, commit: str) -> str | None:
+    """Build a public web URL from the push remote without exposing credentials."""
+    if not re.fullmatch(r'[0-9a-f]{40,64}', commit):
+        return None
+    try:
+        remote = _git(repository, 'remote', 'get-url', '--push', 'origin')
+    except (GitWorkflowError, GitTransportError):
+        return None
+    if remote.startswith('git@github.com:'):
+        path = remote.removeprefix('git@github.com:')
+    else:
+        try:
+            parsed = urlsplit(remote)
+            if parsed.scheme not in {'http', 'https', 'ssh'} or parsed.hostname != 'github.com':
+                return None
+            path = parsed.path.lstrip('/')
+        except ValueError:
+            return None
+    path = path.rstrip('/').removesuffix('.git')
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', path):
+        return None
+    if any(part in {'.', '..'} for part in path.split('/')):
+        return None
+    return f'https://github.com/{path}/commit/{commit}'
 
 
 def require_clean_current_master(repository: Path, branch: str = "master") -> None:

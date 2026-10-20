@@ -207,14 +207,14 @@ async def scrape_and_persist(config: ScrapeConfig | None = None, *, notify: Call
 
 
 async def update_once(repository: Path = REPOSITORY, *, phase=lambda value: None, max_index_pages: int = 100,
-                      transport: TransportConfig | None = None) -> int:
+                      transport: TransportConfig | None = None, published=lambda commit: None) -> int:
     repository = Path(repository).resolve()
     state = runtime_directory(repository)
     with ProcessLock(state / 'writer.lock'):
         publication = Publication(repository, state)
         if publication.journal.exists():
             phase('recovering')
-            return publication.finish(phase=phase)
+            return publication.finish(phase=phase, published=published)
         phase('preflight')
         require_clean_current_master(repository)
         if _git(repository, 'check-attr', 'filter', '--', 'datastores/narou.sqlite').endswith(': lfs'):
@@ -240,7 +240,7 @@ async def update_once(repository: Path = REPOSITORY, *, phase=lambda value: None
             shutil.rmtree(publication.root)
             return 0
         record = publication.record(base, saved_uids)
-        return publication.finish(record, phase=phase)
+        return publication.finish(record, phase=phase, published=published)
 
 
 async def main() -> None:

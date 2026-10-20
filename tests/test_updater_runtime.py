@@ -109,18 +109,25 @@ def test_service_retries_recovers_and_does_not_overlap(runtime_config):
         health = Health(runtime_config)
         calls, alerts = [], []
         outcomes = ['retry', 'retry', 'success', 'success']
+        commit_url = 'https://github.com/example/narou/commit/' + 'a' * 40
 
         async def attempt(config, state, health, stop):
             calls.append((len(calls), health.consecutive_failures))
             await asyncio.sleep(.001)
             if len(calls) == 4:
                 stop.set()
-            return {'outcome': outcomes[len(calls) - 1], 'changed': 2, 'error_category': 'SourceDataError'}
+            return {'outcome': outcomes[len(calls) - 1], 'changed': 2,
+                    'error_category': 'SourceDataError', 'commit_url': commit_url}
 
-        with patch.object(runtime.Notifications, 'send', side_effect=alerts.append):
+        with patch.object(runtime.Notifications, 'send', side_effect=lambda state, **details: alerts.append((state, details))):
             assert await runtime.run_service(runtime_config, stop=stop, attempt=attempt, health=health) == 0
         assert calls == [(0, 0), (1, 1), (2, 2), (3, 0)]
         assert len(alerts) == 3  # first failure, recovery, and successful publication
+        assert [state for state, _ in alerts] == ['retry', 'recovery', 'publication']
+        assert alerts[-1][1]['changed_chapters'] == 2
+        assert alerts[-1][1]['commit_url'] == commit_url
+        payload = runtime.notification_payload('publication', **alerts[-1][1])
+        assert any(field['value'] == f'[View commit]({commit_url})' for field in payload['embeds'][0]['fields'])
         assert health.last_success is not None and health.consecutive_failures == 0
         assert health.state == 'stopped'
     asyncio.run(run())
@@ -253,14 +260,14 @@ def test_notifications_optional_and_bounded(monkeypatch):
     for url in ('', 'invalid', 'http://[bad'):
         monkeypatch.setenv('DISCORD_WEBHOOK_URL', url)
         notifications = runtime.Notifications()
-        notifications.send('Failure')
+        notifications.send('retry')
         assert notifications.queue.empty()
     monkeypatch.setenv('DISCORD_WEBHOOK_URL', 'http://127.0.0.1:1/webhook')
 
     async def run():
         notifications = runtime.Notifications()
         for _ in range(11):
-            notifications.send('Failure')
+            notifications.send('retry')
         assert notifications.queue.qsize() == 10
         sender = asyncio.create_task(notifications.run())
         await asyncio.wait_for(notifications.queue.join(), 3)
@@ -280,3 +287,39 @@ def test_actual_cli_worker_reports_safe_local_failure(runtime_config):
     assert status['outcome'] == 'fatal' and status['error_category'] == 'GitWorkflowError'
     assert (state / 'logs' / 'service.jsonl').exists()
     assert (state / 'logs' / 'worker.jsonl').exists()
+
+
+@pytest.mark.parametrize('remote,expected', [
+    ('https://github.com/example/narou.git', 'example/narou'),
+    ('git@github.com:example/narou.git', 'example/narou'),
+    ('ssh://git@github.com/example/narou.git', 'example/narou'),
+    ('https://user:secret@github.com/example/narou.git?token=secret', 'example/narou'),
+    ('/tmp/local.git', None),
+    ('https://github.com.attacker.invalid/example/narou.git', None),
+    ('https://github.com/../narou.git', None),
+    ('https://[bad', None),
+])
+def test_commit_links_use_github_push_remote_without_credentials(remote, expected, tmp_path):
+    commit = 'a' * 40
+    with patch.object(git_workflow, '_git', return_value=remote):
+        url = git_workflow.github_commit_url(tmp_path, commit)
+    assert url == (f'https://github.com/{expected}/commit/{commit}' if expected else None)
+
+
+def test_worker_reports_exact_verified_publication_commit(runtime_config):
+    import autoscrape_autoupdate as updater
+
+    commit = 'b' * 40
+    commit_url = f'https://github.com/example/narou/commit/{commit}'
+
+    async def update(repository, **kwargs):
+        kwargs['published'](commit)
+        return 2
+
+    with patch.object(updater, 'update_once', side_effect=update), \
+            patch.object(runtime, 'github_commit_url', return_value=commit_url) as resolve:
+        assert runtime.worker_main(runtime_config) == 0
+    resolve.assert_called_once_with(runtime_config.repository, commit)
+    status = runtime.read_worker_status(runtime_directory(runtime_config.repository))
+    assert status == {'outcome': 'success', 'changed': 2, 'phase': 'complete',
+                      'commit': commit, 'commit_url': commit_url}

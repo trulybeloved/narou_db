@@ -69,6 +69,7 @@ def test_restart_at_every_publication_boundary(writer_repo, boundary):
     original_git = publication_module._git
     original_write = publication_module.atomic_copy
     tripped = False
+    published = []
 
     def fail_git(repo, *args, **kwargs):
         nonlocal tripped
@@ -102,11 +103,13 @@ def test_restart_at_every_publication_boundary(writer_repo, boundary):
     with patch.object(publication_module, '_git', side_effect=fail_git), \
             patch.object(publication_module, 'atomic_copy', side_effect=fail_write):
         with pytest.raises((OSError, GitTransportError)):
-            item.finish(record, phase=phase)
+            item.finish(record, phase=phase, published=published.append)
     assert tripped and item.journal.exists()
+    assert published == []
     # Reconstruct exactly as a fresh process would; no in-memory record survives.
     restarted = Publication(repository, runtime_directory(repository))
-    assert restarted.finish() == 1
+    assert restarted.finish(published=published.append) == 1
+    assert published == [_git(repository, 'rev-parse', 'HEAD')]
     assert not restarted.journal.exists()
     assert_published(repository, remote, record['base'])
 

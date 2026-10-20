@@ -134,7 +134,8 @@ class Publication:
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             raise FatalUpdaterError('Corrupt publication journal; preserve state and repair manually') from exc
 
-    def finish(self, record: dict | None = None, *, phase=lambda value: None) -> int:
+    def finish(self, record: dict | None = None, *, phase=lambda value: None,
+               published=lambda commit: None) -> int:
         record = self.load() if record is None else record
         log = logger.bind(transaction_id=record['id'])
         allowed = set(record['files'])
@@ -230,6 +231,7 @@ class Publication:
                 raise FatalUpdaterError('Remote does not contain the pushed publication')
         else:
             raise FatalUpdaterError('Remote diverged during publication; manual reconciliation required')
+        published(head)
         count = len(record['uids'])
         # Rename first so interruption during cleanup cannot damage an active journal.
         completed = self.root.with_name(f'completed-{record["id"]}')

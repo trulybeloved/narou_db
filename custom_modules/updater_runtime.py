@@ -6,6 +6,7 @@ import argparse
 import asyncio
 from contextlib import suppress
 from dataclasses import dataclass, field
+from datetime import datetime
 import json
 import math
 import os
@@ -22,7 +23,8 @@ from dotenv import load_dotenv
 from loguru import logger
 
 from custom_modules.custom_exceptions import WebPageLoadError
-from custom_modules.git_workflow import runtime_directory
+from custom_modules.discord_notifications import notification_payload
+from custom_modules.git_workflow import github_commit_url, runtime_directory
 from custom_modules.updater_safety import (
     FatalUpdaterError, LockUnavailable, ProcessLock, RetryableUpdaterError,
     atomic_json, kill_process_tree,
@@ -151,23 +153,20 @@ class Notifications:
         except ValueError:
             self.enabled = False
 
-    def send(self, message: str) -> None:
+    def send(self, state: str, **details) -> None:
         if not self.enabled:
             return
-        content = f'<t:{int(time.time())}>: {message}'
-        if self.ping.isdigit():
-            content += f'\n<@{self.ping}>'
         try:
-            self.queue.put_nowait(content[:2000])
+            self.queue.put_nowait(notification_payload(state, ping=self.ping, **details))
         except asyncio.QueueFull:
             logger.warning('Discord notification queue full; dropping notification')
 
     async def run(self):
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10), trust_env=False) as session:
             while True:
-                content = await self.queue.get()
+                payload = await self.queue.get()
                 try:
-                    async with session.post(self.url, json={'content': content}, allow_redirects=False) as response:
+                    async with session.post(self.url, json=payload, allow_redirects=False) as response:
                         if not 200 <= response.status < 300:
                             logger.warning('Discord notification failed with HTTP {}', response.status)
                 except (aiohttp.ClientError, TimeoutError, ValueError):
@@ -176,9 +175,18 @@ class Notifications:
                     self.queue.task_done()
 
 
+def _terminal_log_format(record: dict) -> str:
+    context = ' '.join(
+        f'{key}={value:.2f}' if isinstance(value, float) else f'{key}={value}'
+        for key, value in record['extra'].items()
+    )
+    record['context'] = f' | {context}' if context else ''
+    return '<green>{time:YYYY-MM-DD HH:mm:ss Z}</green> | <level>{level: <8}</level> | <level>{message}</level>{context}\n{exception}'
+
+
 def configure_logging(state: Path, worker: bool) -> None:
     logger.remove()
-    logger.add(sys.stderr, serialize=True, backtrace=False, diagnose=False)
+    logger.add(sys.stderr, format=_terminal_log_format, backtrace=False, diagnose=False)
     logger.add(state / 'logs' / ('worker.jsonl' if worker else 'service.jsonl'),
                serialize=True, rotation='10 MB', retention=5, backtrace=False, diagnose=False)
 
@@ -195,14 +203,20 @@ def worker_main(config: RuntimeConfig) -> int:
 
     try:
         prune_runtime(state)
-        changed = asyncio.run(update_once(config.repository, phase=phase, max_index_pages=config.max_index_pages,
+        published_commits = []
+        changed = asyncio.run(update_once(config.repository, phase=phase, published=published_commits.append,
+                                         max_index_pages=config.max_index_pages,
                                          transport=TransportConfig(
                                              request_timeout_seconds=config.request_timeout,
                                              max_tries=config.http_attempts,
                                              retry_max_seconds=config.http_retry_deadline,
                                              diagnostics_dir=state / 'diagnostics',
                                          )))
-        atomic_json(status, {'outcome': 'success', 'changed': changed, 'phase': 'complete'})
+        result = {'outcome': 'success', 'changed': changed, 'phase': 'complete'}
+        if changed and published_commits:
+            result['commit'] = published_commits[-1]
+            result['commit_url'] = github_commit_url(config.repository, result['commit'])
+        atomic_json(status, result)
         return 0
     except (RetryableUpdaterError, WebPageLoadError) as exc:
         logger.exception('Retryable update failure: {}', type(exc).__name__)
@@ -294,6 +308,10 @@ async def run_service(config: RuntimeConfig, *, stop: asyncio.Event | None = Non
         try:
             await runner.setup()
             await web.TCPSite(runner, config.health_host, config.health_port).start()
+            for host, port, *_ in runner.addresses:
+                host = f'[{host}]' if ':' in host else host
+                logger.info('HTTP health endpoints: http://{}:{}/livez | http://{}:{}/readyz',
+                            host, port, host, port)
             loop = asyncio.get_running_loop()
             for name in ('SIGINT', 'SIGTERM', 'SIGBREAK'):
                 if hasattr(signal, name):
@@ -321,22 +339,25 @@ async def run_service(config: RuntimeConfig, *, stop: asyncio.Event | None = Non
                     break
                 if result['outcome'] == 'success':
                     if health.consecutive_failures:
-                        notifications.send('NarouDB recovered; scrape and publication are healthy.')
+                        notifications.send('recovery', failures=health.consecutive_failures, phase=health.phase)
                     health.consecutive_failures = 0
                     last_alert = None
                     health.last_success = time.time()
                     health.last_success_mono = time.monotonic()
                     health.changed_chapters = result.get('changed', 0)
                     if health.changed_chapters:
-                        notifications.send(f'NarouDB published {health.changed_chapters} new or modified chapter(s).')
+                        notifications.send('publication', changed_chapters=health.changed_chapters,
+                                           phase=health.phase, commit_url=result.get('commit_url'))
                     delay = config.interval
                 else:
                     health.consecutive_failures += 1
                     health.changed_chapters = 0
                     now = time.monotonic()
                     if last_alert is None or now - last_alert >= 3600 or result['outcome'] == 'fatal':
-                        notifications.send(f'NarouDB update failed ({health.error_category}); '
-                                           + ('manual intervention required.' if result['outcome'] == 'fatal' else 'automatic retry scheduled.'))
+                        notification_state = ('fatal' if result['outcome'] == 'fatal' else
+                                              'retry' if last_alert is None else 'continuing-failure')
+                        notifications.send(notification_state, error_category=health.error_category,
+                                           failures=health.consecutive_failures, phase=health.phase)
                         last_alert = now
                     if result['outcome'] == 'fatal':
                         health.state = 'fatal'
@@ -349,7 +370,8 @@ async def run_service(config: RuntimeConfig, *, stop: asyncio.Event | None = Non
                     return 0 if result['outcome'] == 'success' else 1
                 health.state = 'waiting'
                 health.next_attempt = time.time() + delay
-                logger.info('Next update attempt at {} (in {:.1f} seconds)', health.next_attempt, delay)
+                logger.info('Next update attempt at {:%Y-%m-%d %H:%M:%S %Z} (in {:.1f} seconds)',
+                            datetime.fromtimestamp(health.next_attempt).astimezone(), delay)
                 await wait_until(stop, time.monotonic() + delay)
             return 0
         finally:
