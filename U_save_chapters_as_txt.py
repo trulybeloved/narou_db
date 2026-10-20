@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import custom_modules.utilities as utils
 import custom_modules.narou_parser as narou_parser
 import ZZ_config as config
+from pathlib import Path
 
 def process_chapter_for_save(chapter) -> tuple:
 
@@ -27,19 +28,24 @@ def process_chapter_for_save(chapter) -> tuple:
 
     return chapter_text, chapter_html, narou_uid
 
-def save_chapter_text_html(chapter_text, chapter_html, narou_uid):
+def save_chapter_text_html(chapter_text, chapter_html, narou_uid, datastore_root=None):
 
-    with open(f'{config.RAW_TEXT_SAVE_FOLDER}/{narou_uid}.txt', 'w', encoding='utf-8') as raw_text_file:
+    text_folder = Path(datastore_root) / 'chapter_raws_txt' if datastore_root is not None else Path(config.RAW_TEXT_SAVE_FOLDER)
+    html_folder = Path(datastore_root) / 'chapter_raws_html' if datastore_root is not None else Path(config.RAW_HTML_SAVE_FOLDER)
+    text_folder.mkdir(parents=True, exist_ok=True)
+    html_folder.mkdir(parents=True, exist_ok=True)
+
+    with open(text_folder / f'{narou_uid}.txt', 'w', encoding='utf-8') as raw_text_file:
         raw_text_file.write(chapter_text)
 
-    with open(f'{config.RAW_HTML_SAVE_FOLDER}/{narou_uid}.html' , 'w', encoding='utf-8') as raw_html_file:
+    with open(html_folder / f'{narou_uid}.html' , 'w', encoding='utf-8') as raw_html_file:
         raw_html_file.write(chapter_html)
 
-def save_chapter(chapter):
+def save_chapter(chapter, datastore_root=None):
 
     try:
         chapter_text, chapter_html, narou_uid = process_chapter_for_save(chapter)
-        save_chapter_text_html(chapter_text, chapter_html, narou_uid)
+        save_chapter_text_html(chapter_text, chapter_html, narou_uid, datastore_root)
         return True, narou_uid
     except Exception as e:
         print(e)

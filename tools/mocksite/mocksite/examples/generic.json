@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "generic",
+  "site_pack": "static",
+  "initial_state": "baseline",
+  "states": {
+    "baseline": {
+      "routes": [{"path": "/items/", "responses": [{"body": "<html><h1>Items</h1><article data-id='1'>First item</article></html>"}]}]
+    },
+    "changed": {
+      "routes": [{"path": "/items/", "responses": [{"body": "<html><h1>Items</h1><article data-id='1'>Edited item</article><article data-id='2'>New item</article></html>"}]}]
+    }
+  }
+}

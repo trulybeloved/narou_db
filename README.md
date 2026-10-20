@@ -35,3 +35,26 @@ atomically promotes it, then commits and pushes the changed datastore files.
 Only one writer may run. A scrape, validation, Git, or push error stops the
 writer and leaves changes uncommitted for investigation. No Cloudflare or D1
 configuration is used.
+
+## Repeatable scraper tests
+
+The [mock website framework](tools/mocksite/README.md) provides a local Narou
+HTTP service, browser control panel, versioned scenarios, and isolated scraper
+runs. It includes a generic site example for reuse in other projects.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-test.txt -e ./tools/mocksite
+.\.venv\Scripts\python.exe -m playwright install chromium
+.\.venv\Scripts\python.exe -m mocksite serve
+```
+
+Open `http://127.0.0.1:8765/__mock/`. In another terminal, run:
+
+```powershell
+.\.venv\Scripts\python.exe sandbox_scrape.py --mock-origin http://127.0.0.1:8765 --datastore outputs/narou-sandbox
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+Sandbox runs record external-effect intentions and write only to a separate
+datastore. Existing production update behavior remains available through
+`autoscrape_autoupdate.py`.
