@@ -129,6 +129,21 @@ unhealthy readiness. Unexpected worker exits are fatal.
 
 ## Supervision
 
+PM2: from the clean writer checkout, use the root
+[ecosystem file](../ecosystem.config.js):
+
+```sh
+pm2 start ecosystem.config.js
+pm2 logs narou-updater
+pm2 save
+```
+
+The configuration uses the checkout's `.venv` interpreter and runs one instance.
+The script loads `.env` and handles its own polling and temporary-failure retries.
+PM2 allows 50 seconds for shutdown and restarts unexpected process failures after
+60 seconds. Exit codes 0–3 leave the process stopped; after repairing a reported
+failure, run `pm2 restart narou-updater`. Run only one supervisor for this checkout.
+
 Linux: copy [the example systemd unit](../deploy/narou-updater.service), adjust
 the account and absolute paths, then enable it. Its stop timeout allows worker
 cleanup and a final bounded notification attempt. Inspect readiness separately
