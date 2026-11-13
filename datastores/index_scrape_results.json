@@ -50,7 +50,7 @@
     {
         "scraped_url": "https://ncode.syosetu.com/n2267be/?p=9",
         "scrape_results": {
-            ".p-eplist": "<div class=\"p-eplist\">\n<div class=\"p-eplist__sublist\">\n<a class=\"p-eplist__subtitle\" href=\"/n2267be/801/\">\n第十章４１　『君の価値は』\n</a>\n<div class=\"p-eplist__update\">\n2026/11/10 08:00\n</div>\n</div>\n</div>"
+            ".p-eplist": "<div class=\"p-eplist\">\n<div class=\"p-eplist__sublist\">\n<a class=\"p-eplist__subtitle\" href=\"/n2267be/801/\">\n第十章４１　『君の価値は』\n</a>\n<div class=\"p-eplist__update\">\n2026/11/10 08:00\n</div>\n</div>\n<div class=\"p-eplist__sublist\">\n<a class=\"p-eplist__subtitle\" href=\"/n2267be/802/\">\n第十章４２　『ミレスタ竜背橋の断末魔』\n</a>\n<div class=\"p-eplist__update\">\n2026/11/13 10:00\n</div>\n</div>\n</div>"
         }
     }
 ]
